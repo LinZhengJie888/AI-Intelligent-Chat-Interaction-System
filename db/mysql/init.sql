@@ -197,7 +197,6 @@ CREATE TABLE `attachment` (
 -- 添加外键约束（增强参照完整性）
 -- ============================================
 /* 注意：添加外键可能在某些部署场景增加写入开销，若需兼容无外键场景可移除下面部分 */
-/*
 ALTER TABLE `group_chat` 
     ADD CONSTRAINT `fk_group_chat_creator` FOREIGN KEY (`creator_id`) REFERENCES `user`(`id`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -233,4 +232,3 @@ ALTER TABLE `attachment`
     ADD CONSTRAINT `fk_attachment_message` FOREIGN KEY (`message_id`) REFERENCES `chat_record`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 SELECT '数据库初始化（含扩展）完成！' AS message;
-*/

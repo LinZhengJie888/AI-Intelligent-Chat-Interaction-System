@@ -19,15 +19,28 @@ ChatRecordDAO::ChatRecordDAO(Database& db) : db_(db) {}
  */
 bool ChatRecordDAO::insert(ChatRecord& record) {
     char sql[4096];
-    snprintf(sql, sizeof(sql),
-            "INSERT INTO chat_record (sender_id, receiver_id, group_id, "
-            "content, msg_type, is_ai, is_recalled, is_read) VALUES "
-            "(%lu, %lu, %lu, '%s', %d, %d, %d, %d)",
-            (unsigned long)record.sender_id,
-            record.receiver_id > 0 ? (unsigned long)record.receiver_id : 0,
-            record.group_id > 0 ? (unsigned long)record.group_id : 0,
-            record.content.c_str(), record.msg_type,
-            record.is_ai, record.is_recalled, record.is_read);
+    
+    // 处理NULL值的情况
+    if (record.group_id > 0) {
+        snprintf(sql, sizeof(sql),
+                "INSERT INTO chat_record (sender_id, receiver_id, group_id, "
+                "content, msg_type, is_ai, is_recalled, is_read) VALUES "
+                "(%lu, %lu, %lu, '%s', %d, %d, %d, %d)",
+                (unsigned long)record.sender_id,
+                record.receiver_id > 0 ? (unsigned long)record.receiver_id : 0,
+                (unsigned long)record.group_id,
+                record.content.c_str(), record.msg_type,
+                record.is_ai, record.is_recalled, record.is_read);
+    } else {
+        snprintf(sql, sizeof(sql),
+                "INSERT INTO chat_record (sender_id, receiver_id, group_id, "
+                "content, msg_type, is_ai, is_recalled, is_read) VALUES "
+                "(%lu, %lu, NULL, '%s', %d, %d, %d, %d)",
+                (unsigned long)record.sender_id,
+                record.receiver_id > 0 ? (unsigned long)record.receiver_id : 0,
+                record.content.c_str(), record.msg_type,
+                record.is_ai, record.is_recalled, record.is_read);
+    }
     
     if (!db_.execute(sql)) {
         return false;

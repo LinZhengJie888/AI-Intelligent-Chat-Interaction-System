@@ -33,6 +33,30 @@ static std::string escapeJson(const std::string& str) {
 }
 
 /**
+ * @brief 根据用户ID字符串获取数字ID
+ * @param db 数据库连接
+ * @param user_id 用户ID字符串
+ * @return 用户数字ID，失败返回0
+ */
+static uint64_t getUserIdNum(Database& db, const std::string& user_id) {
+    char sql[256];
+    snprintf(sql, sizeof(sql), "SELECT id FROM user WHERE user_id='%s'", user_id.c_str());
+    
+    MYSQL_RES* res = db.query(sql);
+    if (!res) return 0;
+    
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row || !row[0]) {
+        db.freeResult(res);
+        return 0;
+    }
+    
+    uint64_t id = strtoull(row[0], nullptr, 10);
+    db.freeResult(res);
+    return id;
+}
+
+/**
  * @brief 构造函数
  */
 GroupService::GroupService(Database& db) : db_(db) {}
@@ -77,21 +101,37 @@ bool GroupService::init() {
  */
 bool GroupService::createGroup(const std::string& creator_id, const std::string& group_name, 
                                std::string& group_id) {
+    // 获取创建者数字ID
+    uint64_t creator_id_num = getUserIdNum(db_, creator_id);
+    if (creator_id_num == 0) {
+        std::cerr << "Creator not found" << std::endl;
+        return false;
+    }
+    
     group_id = generateGroupId();
     
     char sql[1024];
     snprintf(sql, sizeof(sql),
              "INSERT INTO group_chat (group_id, group_name, creator_id, create_time) "
-             "VALUES ('%s', '%s', '%s', NOW())",
-             group_id.c_str(), group_name.c_str(), creator_id.c_str());
+             "VALUES ('%s', '%s', %lu, NOW())",
+             group_id.c_str(), group_name.c_str(), (unsigned long)creator_id_num);
     
     if (!db_.execute(sql)) {
         std::cerr << "Failed to create group" << std::endl;
         return false;
     }
     
-    // 将创建者添加为群主
-    if (!addGroupMember(group_id, creator_id, 2)) {
+    // 获取新插入的group_chat的数字ID
+    uint64_t group_id_num = mysql_insert_id(db_.getConnection());
+    
+    // 将创建者添加为群主（使用数字ID）
+    char member_sql[512];
+    snprintf(member_sql, sizeof(member_sql),
+             "INSERT INTO group_member (group_id, user_id, role, join_time) "
+             "VALUES (%lu, %lu, 2, NOW())",
+             (unsigned long)group_id_num, (unsigned long)creator_id_num);
+    
+    if (!db_.execute(member_sql)) {
         std::cerr << "Failed to add creator as group member" << std::endl;
         return false;
     }

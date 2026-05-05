@@ -46,6 +46,30 @@ static std::string escapeJson(const std::string& str) {
 }
 
 /**
+ * @brief 根据用户ID字符串获取数字ID
+ * @param db 数据库连接
+ * @param user_id 用户ID字符串
+ * @return 用户数字ID，失败返回0
+ */
+static uint64_t getUserIdNum(Database& db, const std::string& user_id) {
+    char sql[256];
+    snprintf(sql, sizeof(sql), "SELECT id FROM user WHERE user_id='%s'", user_id.c_str());
+    
+    MYSQL_RES* res = db.query(sql);
+    if (!res) return 0;
+    
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row || !row[0]) {
+        db.freeResult(res);
+        return 0;
+    }
+    
+    uint64_t id = strtoull(row[0], nullptr, 10);
+    db.freeResult(res);
+    return id;
+}
+
+/**
  * @brief 获取JSON值辅助函数
  */
 static std::string getJsonValue(const std::string& json, const std::string& key) {
@@ -630,6 +654,10 @@ void AiService::sendAIResponse(const std::string& user_id, const std::string& ta
                                 const std::vector<std::string>& messages, bool is_group) {
     ChatService& chat_service = ChatService::getInstance();
     
+    // 获取数字ID
+    uint64_t user_id_num = getUserIdNum(db_, user_id);
+    uint64_t target_id_num = getUserIdNum(db_, target_id);
+    
     for (const auto& message : messages) {
         // 构建AI回复消息
         std::ostringstream oss;
@@ -650,16 +678,18 @@ void AiService::sendAIResponse(const std::string& user_id, const std::string& ta
             chat_service.broadcastToUser(target_id, msg_str);
         }
         
-        // 保存到聊天记录
-        ChatRecord record;
-        record.sender_id = strtoull(user_id.c_str(), nullptr, 10);
-        record.receiver_id = strtoull(target_id.c_str(), nullptr, 10);
-        record.group_id = is_group ? strtoull(target_id.c_str(), nullptr, 10) : 0;
-        record.content = message;
-        record.is_ai = 1;
-        
-        ChatRecordDAO record_dao(db_);
-        record_dao.insert(record);
+        // 保存到聊天记录（使用数字ID）
+        if (user_id_num > 0 && target_id_num > 0) {
+            ChatRecord record;
+            record.sender_id = user_id_num;
+            record.receiver_id = target_id_num;
+            record.group_id = 0;
+            record.content = message;
+            record.is_ai = 1;
+            
+            ChatRecordDAO record_dao(db_);
+            record_dao.insert(record);
+        }
         
         // 添加延迟，模拟逐条发送
         std::this_thread::sleep_for(std::chrono::milliseconds(300));

@@ -320,7 +320,7 @@ bool VerifyService::saveCaptchaToDB(const CaptchaInfo& info) {
                   "%Y-%m-%d %H:%M:%S", std::localtime(&info.expire_time));
     
     snprintf(sql, sizeof(sql),
-             "INSERT INTO verification_code (phone, code, token, expire_time, is_used) "
+             "INSERT INTO verification_code (phone, code, captcha_token, expire_time, is_used) "
              "VALUES ('%s', '%s', '%s', '%s', %d)",
              info.phone.c_str(), info.code.c_str(), info.token.c_str(),
              expire_time_str, info.used ? 1 : 0);

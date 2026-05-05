@@ -42,17 +42,46 @@ static std::string getJsonValue(const std::string& json, const std::string& key)
     
     std::string value;
     if (json[pos] == '"') {
-        // 字符串值
+        // 字符串值 - 正确处理转义引号
         pos++;
-        size_t end = json.find("\"", pos);
-        if (end == std::string::npos) return "";
+        size_t end = pos;
+        while (end < json.size()) {
+            if (json[end] == '\\' && end + 1 < json.size()) {
+                end += 2; // 跳过转义字符
+                continue;
+            }
+            if (json[end] == '"') break;
+            end++;
+        }
+        if (end >= json.size()) return "";
         value = json.substr(pos, end - pos);
+        // 处理转义字符
+        std::string unescaped;
+        for (size_t i = 0; i < value.size(); i++) {
+            if (value[i] == '\\' && i + 1 < value.size()) {
+                switch (value[i + 1]) {
+                    case '"': unescaped += '"'; i++; break;
+                    case '\\': unescaped += '\\'; i++; break;
+                    case 'n': unescaped += '\n'; i++; break;
+                    case 'r': unescaped += '\r'; i++; break;
+                    case 't': unescaped += '\t'; i++; break;
+                    default: unescaped += value[i]; break;
+                }
+            } else {
+                unescaped += value[i];
+            }
+        }
+        value = unescaped;
     } else if (json[pos] == '{' || json[pos] == '[') {
         // 对象或数组
         int bracket_count = 0;
         char target_bracket = (json[pos] == '{') ? '}' : ']';
         size_t start = pos;
         for (; pos < json.size(); pos++) {
+            if (json[pos] == '\\') {
+                pos++; // 跳过转义字符
+                continue;
+            }
             if (json[pos] == json[start]) bracket_count++;
             else if (json[pos] == target_bracket) bracket_count--;
             if (bracket_count == 0) break;
@@ -90,6 +119,30 @@ static std::string escapeJson(const std::string& str) {
         }
     }
     return result;
+}
+
+/**
+ * @brief 根据用户ID字符串获取数字ID
+ * @param db 数据库连接
+ * @param user_id 用户ID字符串
+ * @return 用户数字ID，失败返回0
+ */
+static uint64_t getUserIdNum(Database& db, const std::string& user_id) {
+    char sql[256];
+    snprintf(sql, sizeof(sql), "SELECT id FROM user WHERE user_id='%s'", user_id.c_str());
+    
+    MYSQL_RES* res = db.query(sql);
+    if (!res) return 0;
+    
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row || !row[0]) {
+        db.freeResult(res);
+        return 0;
+    }
+    
+    uint64_t id = strtoull(row[0], nullptr, 10);
+    db.freeResult(res);
+    return id;
 }
 
 /**
@@ -815,10 +868,19 @@ void ChatService::handlePrivateChat(spConnection conn, const Message& msg) {
         return;
     }
     
+    // 获取数字ID
+    uint64_t from_id_num = getUserIdNum(*db_, from_user_id);
+    uint64_t to_id_num = getUserIdNum(*db_, to_user_id);
+    if (from_id_num == 0 || to_id_num == 0) {
+        sendResponse(conn, static_cast<int>(MessageType::CHAT_PRIVATE), -1, 
+                    "User not found");
+        return;
+    }
+    
     // 保存消息
     ChatRecord record;
-    record.sender_id = strtoull(from_user_id.c_str(), nullptr, 10);
-    record.receiver_id = strtoull(to_user_id.c_str(), nullptr, 10);
+    record.sender_id = from_id_num;
+    record.receiver_id = to_id_num;
     record.group_id = 0;
     record.content = content;
     record.is_ai = 0;

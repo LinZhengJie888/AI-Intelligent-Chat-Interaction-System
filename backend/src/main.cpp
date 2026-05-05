@@ -8,42 +8,86 @@
 #include "reactor/Timestamp.h"
 #include "module/Config.h"
 #include "module/Database.h"
+#include "module/ChatService.h"
 #include "model/User.h"
 #include "model/UserDAO.h"
 #include "common/Util.h"
 
 TcpServer *server;
+Database *db;
 
 void Stop(int sig)
 {
     std::cout << "Received signal " << sig << ", stopping server..." << std::endl;
     server->stop();
     delete server;
+    if (db) {
+        delete db;
+    }
     std::cout << "Server stopped." << std::endl;
     exit(0);
 }
 
 void HandleNewConnection(spConnection conn)
 {
-    std::cout << Timestamp::now().tostring() << " New connection: fd=" << conn->fd() 
-              << ", ip=" << conn->ip() << ", port=" << conn->port() << std::endl;
+    ChatService::getInstance().handleNewConnection(conn);
 }
 
 void HandleClose(spConnection conn)
 {
-    std::cout << Timestamp::now().tostring() << " Connection closed: fd=" << conn->fd() << std::endl;
+    ChatService::getInstance().handleClose(conn);
 }
 
 void HandleMessage(spConnection conn, std::string& message)
 {
-    std::cout << Timestamp::now().tostring() << " Received message: " << message << std::endl;
-    std::string reply = "Echo: " + message;
-    conn->send(reply.data(), reply.size());
+    ChatService::getInstance().handleMessage(conn, message);
 }
 
 void HandleSendComplete(spConnection conn)
 {
-    std::cout << Timestamp::now().tostring() << " Send complete." << std::endl;
+    ChatService::getInstance().handleSendComplete(conn);
+}
+
+/**
+ * @brief 初始化数据库和业务模块
+ * @return 初始化成功返回true，失败返回false
+ */
+bool InitServices() {
+    std::cout << "\n========== 初始化服务 ==========" << std::endl;
+    
+    // 1. 加载配置
+    std::cout << "1. 加载配置文件..." << std::endl;
+    Config& config = Config::getInstance();
+    if (!config.loadFromFile("./config.ini")) {
+        std::cout << "   警告: 无法加载配置文件，使用默认配置" << std::endl;
+        config.saveToFile("./config.ini");
+        std::cout << "   已创建默认配置文件 config.ini" << std::endl;
+    }
+    
+    const DBConfig& db_config = config.getDBConfig();
+    std::cout << "   数据库配置: " << db_config.user << "@" << db_config.host << ":" << db_config.port << "/" << db_config.dbname << std::endl;
+    
+    // 2. 连接数据库
+    std::cout << "\n2. 连接数据库..." << std::endl;
+    db = new Database();
+    if (!db->connect(db_config.host, db_config.port,
+                     db_config.user, db_config.password, db_config.dbname)) {
+        std::cout << "   错误: 数据库连接失败！" << std::endl;
+        std::cout << "   请检查 config.ini 中的数据库配置是否正确" << std::endl;
+        return false;
+    }
+    std::cout << "   数据库连接成功！" << std::endl;
+    
+    // 3. 初始化ChatService
+    std::cout << "\n3. 初始化ChatService..." << std::endl;
+    if (!ChatService::getInstance().init(*db)) {
+        std::cout << "   错误: ChatService初始化失败！" << std::endl;
+        return false;
+    }
+    std::cout << "   ChatService初始化成功！" << std::endl;
+    
+    std::cout << "\n========== 服务初始化完成 ==========\n" << std::endl;
+    return true;
 }
 
 /**
@@ -67,8 +111,8 @@ bool TestDatabaseAndModel() {
     
     // 2. 连接数据库
     std::cout << "\n2. 连接数据库..." << std::endl;
-    Database db;
-    if (!db.connect(db_config.host, db_config.port,
+    Database test_db;
+    if (!test_db.connect(db_config.host, db_config.port,
                      db_config.user, db_config.password, db_config.dbname)) {
         std::cout << "   错误: 数据库连接失败！" << std::endl;
         std::cout << "   请检查 config.ini 中的数据库配置是否正确" << std::endl;
@@ -78,7 +122,7 @@ bool TestDatabaseAndModel() {
     
     // 3. 测试UserDAO
     std::cout << "\n3. 测试UserDAO..." << std::endl;
-    UserDAO user_dao(db);
+    UserDAO user_dao(test_db);
     
     // 4. 尝试删除已存在的测试用户
     std::cout << "   清理测试数据..." << std::endl;
@@ -139,23 +183,33 @@ int main(int argc, char *argv[])
         port = atoi(argv[2]);
     }
     
-    // 测试数据库和model模块
-    if (!TestDatabaseAndModel()) {
-        std::cout << "测试失败，程序退出" << std::endl;
+    // 测试数据库和model模块（可选）
+    // if (!TestDatabaseAndModel()) {
+    //     std::cout << "测试失败，程序退出" << std::endl;
+    //     return -1;
+    // }
+    
+    // 初始化服务
+    if (!InitServices()) {
+        std::cout << "服务初始化失败，程序退出" << std::endl;
         return -1;
     }
     
     signal(SIGTERM, Stop);
     signal(SIGINT, Stop);
     
-    std::cout << "Starting echo server on " << ip << ":" << port << "..." << std::endl;
+    std::cout << "Starting AI Chat Server on " << ip << ":" << port << "..." << std::endl;
     
     server = new TcpServer(ip, port, 3);
     
+    // 设置回调函数，使用ChatService处理消息
     server->setnewconnectioncb(HandleNewConnection);
     server->setcloseconnectioncb(HandleClose);
     server->setonmessagecb(HandleMessage);
     server->setsendcompletecb(HandleSendComplete);
+    
+    std::cout << "Server started successfully!" << std::endl;
+    std::cout << "Waiting for connections..." << std::endl;
     
     server->start();
     

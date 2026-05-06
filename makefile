@@ -1,5 +1,5 @@
 CC = g++
-CFLAGS = -std=c++11 -Wall -O2
+CFLAGS = -std=c++11 -Wall -O2 -g -DUSE_CURL
 INCLUDES = -I./backend/include -I./backend/include/reactor \
            -I./backend/include/model -I./backend/include/module \
            -I./backend/include/module/ai_api -I./backend/include/module/verify \
@@ -37,7 +37,7 @@ TARGET = ai_chat_server
 all: $(TARGET)
 
 $(TARGET): $(MAIN_SRC) $(REACTOR_SRCS) $(MODEL_SRCS) $(MODULE_SRCS) $(COMMON_SRCS)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $(TARGET) $(MAIN_SRC) $(REACTOR_SRCS) $(MODEL_SRCS) $(MODULE_SRCS) $(COMMON_SRCS) -lpthread -lmysqlclient -lcrypto
+	$(CC) $(CFLAGS) $(INCLUDES) -o $(TARGET) $(MAIN_SRC) $(REACTOR_SRCS) $(MODEL_SRCS) $(MODULE_SRCS) $(COMMON_SRCS) -lpthread -lmysqlclient -lcrypto -lcurl
 
 clean:
 	rm -f $(TARGET)

@@ -35,6 +35,7 @@ Config::Config() {
     // AI默认配置
     ai_config_.api_url = "";
     ai_config_.api_key = "";
+    ai_config_.model = "mimo";
     ai_config_.default_nickname = "AI助手";
     ai_config_.default_tone = 0;
     ai_config_.default_priority = 0;
@@ -142,6 +143,7 @@ bool Config::loadFromFile(const std::string& filename) {
             } else if (current_section == "ai") {
                 if (key == "api_url") ai_config_.api_url = value;
                 else if (key == "api_key") ai_config_.api_key = value;
+                else if (key == "model") ai_config_.model = value;
                 else if (key == "default_nickname") ai_config_.default_nickname = value;
                 else if (key == "default_tone") ai_config_.default_tone = std::stoi(value);
                 else if (key == "default_priority") ai_config_.default_priority = std::stoi(value);
@@ -180,6 +182,7 @@ bool Config::saveToFile(const std::string& filename) {
     file << "[ai]\n";
     file << "api_url = " << ai_config_.api_url << "\n";
     file << "api_key = " << ai_config_.api_key << "\n";
+    file << "model = " << ai_config_.model << "\n";
     file << "default_nickname = " << ai_config_.default_nickname << "\n";
     file << "default_tone = " << ai_config_.default_tone << "\n";
     file << "default_priority = " << ai_config_.default_priority << "\n\n";

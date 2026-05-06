@@ -62,7 +62,8 @@ bool Database::connect(const std::string& host, int port,
  */
 void Database::disconnect() {
     if (connection_) {
-        mysql_close(connection_);
+           std::lock_guard<std::mutex> lock(mutex_);
+           mysql_close(connection_);
         connection_ = nullptr;
     }
     connected_ = false;
@@ -93,11 +94,11 @@ bool Database::execute(const std::string& sql) {
     if (!connected_ || !connection_) {
         return false;
     }
-    
-    if (mysql_query(connection_, sql.c_str()) != 0) {
-        fprintf(stderr, "MySQL execute error: %s\n", mysql_error(connection_));
-        return false;
-    }
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (mysql_query(connection_, sql.c_str()) != 0) {
+            fprintf(stderr, "MySQL execute error: %s\n", mysql_error(connection_));
+            return false;
+        }
     return true;
 }
 
@@ -110,12 +111,12 @@ MYSQL_RES* Database::query(const std::string& sql) {
     if (!connected_ || !connection_) {
         return nullptr;
     }
-    
-    if (mysql_query(connection_, sql.c_str()) != 0) {
-        fprintf(stderr, "MySQL query error: %s\n", mysql_error(connection_));
-        return nullptr;
-    }
-    
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (mysql_query(connection_, sql.c_str()) != 0) {
+            fprintf(stderr, "MySQL query error: %s\n", mysql_error(connection_));
+            return nullptr;
+        }
+
     return mysql_store_result(connection_);
 }
 
@@ -125,6 +126,19 @@ MYSQL_RES* Database::query(const std::string& sql) {
  */
 void Database::freeResult(MYSQL_RES* res) {
     if (res) {
-        mysql_free_result(res);
+           std::lock_guard<std::mutex> lock(mutex_);
+           mysql_free_result(res);
     }
+}
+
+std::string Database::escapeString(const std::string& input) {
+    if (!connection_) return "";
+    std::lock_guard<std::mutex> lock(mutex_);
+    // mysql_real_escape_string requires a buffer at least length*2 + 1
+    size_t len = input.length();
+    std::string buf;
+    buf.resize(len * 2 + 1);
+    unsigned long out_len = mysql_real_escape_string(connection_, &buf[0], input.c_str(), static_cast<unsigned long>(len));
+    buf.resize(out_len);
+    return buf;
 }

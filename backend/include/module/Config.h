@@ -28,6 +28,7 @@ struct DBConfig {
 struct AIConfig {
     std::string api_url;          ///< AI API地址
     std::string api_key;          ///< AI API密钥
+    std::string model;            ///< AI模型名称
     std::string default_nickname; ///< AI默认昵称
     int default_tone;             ///< AI默认语气
     int default_priority;         ///< AI默认响应优先级

@@ -9,6 +9,7 @@
 
 #include <string>
 #include <mysql/mysql.h>
+#include <mutex>
 
 /**
  * @class Database
@@ -76,7 +77,15 @@ public:
      */
     void freeResult(MYSQL_RES* res);
 
+    /**
+     * @brief 对输入字符串进行 MySQL 转义，线程安全
+     * @param input 原始字符串
+     * @return 转义后的字符串
+     */
+    std::string escapeString(const std::string& input);
+
 private:
     MYSQL* connection_;   ///< MySQL连接指针
     bool connected_;      ///< 连接状态
+    std::mutex mutex_;    ///< 保护mysql连接的互斥锁，避免多线程同时访问同一连接
 };

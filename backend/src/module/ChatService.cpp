@@ -377,6 +377,7 @@ std::string ChatService::buildResponse(int type, int code, const std::string& ms
 void ChatService::sendResponse(spConnection conn, int type, int code, 
                                const std::string& msg, const std::string& data) {
     std::string response = buildResponse(type, code, msg, data);
+    std::cout << "[ChatService] Sending response: " << response << std::endl;
     conn->send(response.data(), response.size());
 }
 
@@ -951,6 +952,18 @@ void ChatService::handleAiRequest(spConnection conn, const Message& msg) {
     std::string question = msg.content;
     bool is_group = (getJsonValue(msg.extra, "is_group") == "true");
     
+    // 确保用户连接已保存
+    {
+        std::lock_guard<std::mutex> lock(conn_mutex_);
+        user_connections_[user_id] = conn;
+        fd_to_user_[conn->fd()] = user_id;
+    }
+    
+    // 如果没有指定目标，发送给自己
+    if (target_id.empty()) {
+        target_id = user_id;
+    }
+    
     ai_service_->processRequest(user_id, target_id, question, is_group);
     
     sendResponse(conn, static_cast<int>(MessageType::AI_REQUEST), 0, 
@@ -1018,7 +1031,12 @@ void ChatService::broadcastToUser(const std::string& user_id, const std::string&
     
     auto it = user_connections_.find(user_id);
     if (it != user_connections_.end()) {
-        it->second->send(message.data(), message.size());
+        try {
+            it->second->send(message.data(), message.size());
+        } catch (const std::exception& e) {
+            std::cerr << "[ChatService] Failed to send message to " << user_id << ": " << e.what() << std::endl;
+            user_connections_.erase(it);
+        }
     }
 }
 
@@ -1040,4 +1058,12 @@ void ChatService::broadcastToGroup(const std::string& group_id, const std::strin
             it->second->send(message.data(), message.size());
         }
     }
+}
+
+/**
+ * @brief 检查用户是否在线
+ */
+bool ChatService::isUserOnline(const std::string& user_id) {
+    std::lock_guard<std::mutex> lock(conn_mutex_);
+    return user_connections_.find(user_id) != user_connections_.end();
 }

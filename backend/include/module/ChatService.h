@@ -148,6 +148,13 @@ public:
     void broadcastToGroup(const std::string& group_id, const std::string& message, 
                          const std::string& exclude_user_id = "");
 
+    /**
+     * @brief 检查用户是否在线
+     * @param user_id 用户ID
+     * @return 在线返回true，否则false
+     */
+    bool isUserOnline(const std::string& user_id);
+
 private:
     /**
      * @brief 私有构造函数

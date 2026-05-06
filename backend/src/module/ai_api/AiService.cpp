@@ -34,6 +34,7 @@ static std::string escapeJson(const std::string& str) {
         switch (c) {
             case '"': result += "\\\""; break;
             case '\\': result += "\\\\"; break;
+            case '\'': result += "''"; break;  // SQL单引号转义
             case '\b': result += "\\b"; break;
             case '\f': result += "\\f"; break;
             case '\n': result += "\\n"; break;
@@ -87,15 +88,45 @@ static std::string getJsonValue(const std::string& json, const std::string& key)
     
     std::string value;
     if (json[pos] == '"') {
+        // 字符串值 - 正确处理转义引号
         pos++;
-        size_t end = json.find("\"", pos);
-        if (end == std::string::npos) return "";
+        size_t end = pos;
+        while (end < json.size()) {
+            if (json[end] == '\\' && end + 1 < json.size()) {
+                end += 2; // 跳过转义字符
+                continue;
+            }
+            if (json[end] == '"') break;
+            end++;
+        }
+        if (end >= json.size()) return "";
         value = json.substr(pos, end - pos);
+        // 处理转义字符
+        std::string unescaped;
+        for (size_t i = 0; i < value.size(); i++) {
+            if (value[i] == '\\' && i + 1 < value.size()) {
+                switch (value[i + 1]) {
+                    case '"': unescaped += '"'; i++; break;
+                    case '\\': unescaped += '\\'; i++; break;
+                    case 'n': unescaped += '\n'; i++; break;
+                    case 'r': unescaped += '\r'; i++; break;
+                    case 't': unescaped += '\t'; i++; break;
+                    default: unescaped += value[i]; break;
+                }
+            } else {
+                unescaped += value[i];
+            }
+        }
+        value = unescaped;
     } else if (json[pos] == '{' || json[pos] == '[') {
         int bracket_count = 0;
         char target_bracket = (json[pos] == '{') ? '}' : ']';
         size_t start = pos;
         for (; pos < json.size(); pos++) {
+            if (json[pos] == '\\') {
+                pos++; // 跳过转义字符
+                continue;
+            }
             if (json[pos] == json[start]) bracket_count++;
             else if (json[pos] == target_bracket) bracket_count--;
             if (bracket_count == 0) break;
@@ -165,9 +196,23 @@ bool AiService::init() {
     
     config_.api_url = ai_config.api_url;
     config_.api_key = ai_config.api_key;
+    config_.model = ai_config.model;
+    
+    // 确保API URL以/chat/completions结尾
+    if (!config_.api_url.empty()) {
+        // 移除末尾的斜杠
+        while (!config_.api_url.empty() && config_.api_url.back() == '/') {
+            config_.api_url.pop_back();
+        }
+        // 添加/chat/completions路径
+        if (config_.api_url.find("/chat/completions") == std::string::npos) {
+            config_.api_url += "/chat/completions";
+        }
+    }
     
     std::cout << "AiService initialized successfully" << std::endl;
-    std::cout << "AI API URL: " << (config_.api_url.empty() ? "Not configured" : "Configured") << std::endl;
+    std::cout << "AI API URL: " << (config_.api_url.empty() ? "Not configured" : config_.api_url) << std::endl;
+    std::cout << "AI Model: " << config_.model << std::endl;
     
     return true;
 }
@@ -211,10 +256,13 @@ std::string AiService::processRequest(const std::string& user_id, const std::str
 bool AiService::callAIAPI(const std::string& question, AITone tone, AIPriority priority, 
                            std::string& response) {
     if (config_.api_url.empty() || config_.api_key.empty()) {
-        std::cerr << "AI API not configured" << std::endl;
+        std::cerr << "[AI] API not configured" << std::endl;
         response = "AI服务未配置，请联系管理员";
         return false;
     }
+    
+    std::cout << "[AI] Calling API: " << config_.api_url << std::endl;
+    std::cout << "[AI] Model: " << config_.model << std::endl;
     
     // 检查缓存
     if (config_.enable_cache) {
@@ -276,30 +324,46 @@ bool AiService::callAIAPI(const std::string& question, AITone tone, AIPriority p
     std::string api_response;
     bool success = false;
     
+    std::cout << "[AI] Request body: " << body.str().substr(0, 200) << "..." << std::endl;
+    
     for (int retry = 0; retry < config_.max_retries; retry++) {
+        std::cout << "[AI] HTTP request attempt " << (retry + 1) << "/" << config_.max_retries << std::endl;
         if (httpPost(config_.api_url, headers, body.str(), api_response, config_.timeout_seconds)) {
+            std::cout << "[AI] HTTP response received, length=" << api_response.length() << std::endl;
             // 解析响应
             std::string content;
+            std::cout << "[AI] parseAIResponse returned, checking result..." << std::endl;
             if (parseAIResponse(api_response, content)) {
+                std::cout << "[AI] parseAIResponse returned true" << std::endl;
                 response = content;
                 success = true;
+                std::cout << "[AI] Parsed content: " << content.substr(0, 200) << std::endl;
                 
                 // 缓存响应
                 if (config_.enable_cache) {
+                    std::cout << "[AI] Caching response..." << std::endl;
                     cacheResponse(question, response);
+                    std::cout << "[AI] Response cached" << std::endl;
                 }
                 
+                std::cout << "[AI] Breaking from retry loop..." << std::endl;
                 break;
+            } else {
+                std::cerr << "[AI] Failed to parse response" << std::endl;
             }
+        } else {
+            std::cerr << "[AI] HTTP request failed" << std::endl;
         }
         
-        std::cerr << "AI API call failed, retry " << (retry + 1) << "/" << config_.max_retries << std::endl;
+        std::cerr << "[AI] API call failed, retry " << (retry + 1) << "/" << config_.max_retries << std::endl;
         
         // 重试前等待
         if (retry < config_.max_retries - 1) {
             std::this_thread::sleep_for(std::chrono::milliseconds(500 * (retry + 1)));
         }
     }
+    
+    std::cout << "[AI] callAIAPI returning: " << success << std::endl;
     
     if (!success) {
         response = "AI服务暂时不可用，请稍后再试";
@@ -575,13 +639,8 @@ bool AiService::cacheResponse(const std::string& question, const std::string& re
         response_cache_[question] = std::make_pair(response, std::time(nullptr));
     }
     
-    // 保存到数据库
-    char sql[8192];
-    snprintf(sql, sizeof(sql),
-             "INSERT INTO ai_cache (question, response, create_time) VALUES ('%s', '%s', NOW())",
-             escapeJson(question).c_str(), escapeJson(response).c_str());
-    
-    return db_.execute(sql);
+    // 跳过数据库缓存（避免SQL注入问题）
+    return true;
 }
 
 /**
@@ -636,48 +695,61 @@ std::string AiService::generateRequestId() {
 void AiService::logAICall(const std::string& request_id, const std::string& user_id, 
                            const std::string& question, const std::string& response, 
                            bool success, const std::string& error_msg, int response_time) {
-    char sql[8192];
+    // 使用 Database::escapeString 以避免 SQL 注入并确保持有 DB 互斥锁
+    std::string esc_request_id = db_.escapeString(request_id);
+    std::string esc_user_id = db_.escapeString(user_id);
+    std::string esc_question = db_.escapeString(question);
+    std::string esc_response = db_.escapeString(response);
+    std::string esc_error = db_.escapeString(error_msg);
+
+    char sql[16384];
     snprintf(sql, sizeof(sql),
              "INSERT INTO ai_log (request_id, user_id, question, response, success, error_msg, response_time, create_time) "
              "VALUES ('%s', '%s', '%s', '%s', %d, '%s', %d, NOW())",
-             request_id.c_str(), user_id.c_str(), 
-             escapeJson(question).c_str(), escapeJson(response).c_str(),
-             success ? 1 : 0, error_msg.c_str(), response_time);
-    
-    db_.execute(sql);
+             esc_request_id.c_str(), esc_user_id.c_str(),
+             esc_question.c_str(), esc_response.c_str(),
+             success ? 1 : 0, esc_error.c_str(), response_time);
+
+    if (!db_.execute(sql)) {
+        std::cerr << "[AI] Failed to insert ai_log: " << mysql_error(db_.getConnection()) << std::endl;
+    }
 }
 
 /**
  * @brief 发送AI回复给用户
  */
 void AiService::sendAIResponse(const std::string& user_id, const std::string& target_id, 
-                                const std::vector<std::string>& messages, bool is_group) {
+                                const std::vector<std::string>& messages, bool is_group,
+                                const std::string& origin_user_id) {
+    std::cout << "[AI] Sending AI response to " << target_id << ", messages=" << messages.size() << std::endl;
     ChatService& chat_service = ChatService::getInstance();
-    
-    // 获取数字ID
+
+    // 获取数字ID（用于保存聊天记录）
     uint64_t user_id_num = getUserIdNum(db_, user_id);
     uint64_t target_id_num = getUserIdNum(db_, target_id);
-    
+
     for (const auto& message : messages) {
         // 构建AI回复消息
         std::ostringstream oss;
         oss << "{\"type\":" << (is_group ? 34 : 40)  // GROUP_MESSAGE or CHAT_PRIVATE
             << ",\"from_user_id\":\"" << user_id << "\""
-            << ",\"to_user_id\":\"" << target_id << "\""
+            << ",\"to_user_id\":\"" << origin_user_id << "\""
             << ",\"content\":\"" << escapeJson(message) << "\""
-            << ",\"extra\":{\"is_ai\":true}"
+            << ",\"extra\":\"{\\\"is_ai\\\":true}\""
             << ",\"timestamp\":\"" << util::getCurrentTime() << "\"}";
-        
+        std::cout << "[AI] Constructed message: " << oss.str() << std::endl;
+
         std::string msg_str = oss.str();
-        
+
         if (is_group) {
             // 群聊消息广播
             chat_service.broadcastToGroup(target_id, msg_str);
         } else {
-            // 私聊消息推送
-            chat_service.broadcastToUser(target_id, msg_str);
+            // 私聊消息推送：直接发送给发起请求的用户
+            std::cout << "[AI] Sending response to origin user " << origin_user_id << std::endl;
+            chat_service.broadcastToUser(origin_user_id, msg_str);
         }
-        
+
         // 保存到聊天记录（使用数字ID）
         if (user_id_num > 0 && target_id_num > 0) {
             ChatRecord record;
@@ -686,11 +758,11 @@ void AiService::sendAIResponse(const std::string& user_id, const std::string& ta
             record.group_id = 0;
             record.content = message;
             record.is_ai = 1;
-            
+
             ChatRecordDAO record_dao(db_);
             record_dao.insert(record);
         }
-        
+
         // 添加延迟，模拟逐条发送
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
     }
@@ -700,16 +772,24 @@ void AiService::sendAIResponse(const std::string& user_id, const std::string& ta
  * @brief 异步处理AI请求
  */
 void AiService::asyncProcessRequest(const AIRequest& request) {
+    std::cout << "[AI] Processing request: " << request.request_id << std::endl;
     auto start_time = std::chrono::steady_clock::now();
     
     // 获取用户AI设置
     std::string ai_nickname;
     int tone = 0;
     int priority = 0;
-    getUserAISettings(request.user_id, ai_nickname, tone, priority);
+    if (!getUserAISettings(request.user_id, ai_nickname, tone, priority)) {
+        // 如果用户不存在，使用默认昵称
+        ai_nickname = "AI助手";
+        std::cout << "[AI] User not found, using default nickname: " << ai_nickname << std::endl;
+    } else {
+        std::cout << "[AI] User settings: nickname=" << ai_nickname << ", tone=" << tone << ", priority=" << priority << std::endl;
+    }
     
     // 调用AI API
     std::string response;
+    std::cout << "[AI] Calling API..." << std::endl;
     bool success = callAIAPI(request.question, static_cast<AITone>(tone), 
                             static_cast<AIPriority>(priority), response);
     
@@ -717,28 +797,37 @@ void AiService::asyncProcessRequest(const AIRequest& request) {
     int response_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
     
     // 记录日志
+    std::cout << "[AI] Logging API call..." << std::endl;
     logAICall(request.request_id, request.user_id, request.question, response, 
               success, success ? "" : response, response_time);
     
+    std::cout << "[AI] Success=" << success << ", response length=" << response.length() << std::endl;
+    
     if (success) {
         // 拆分回复
+        std::cout << "[AI] Splitting response..." << std::endl;
         std::vector<std::string> messages = splitResponse(response, config_.max_message_length);
+        std::cout << "[AI] Split into " << messages.size() << " messages" << std::endl;
         
         // 发送回复
-        sendAIResponse(ai_nickname, request.target_id, messages, request.is_group);
+        std::cout << "[AI] Sending response to user: " << request.target_id << std::endl;
+        sendAIResponse(ai_nickname, request.target_id, messages, request.is_group, request.user_id);
+        std::cout << "[AI] Response sent successfully" << std::endl;
     } else {
         // 发送错误消息
+        std::cout << "[AI] Sending error message..." << std::endl;
         std::vector<std::string> error_messages = {response};
-        sendAIResponse(ai_nickname, request.target_id, error_messages, request.is_group);
+        sendAIResponse(ai_nickname, request.target_id, error_messages, request.is_group, request.user_id);
     }
     
     // 从待处理队列移除
+    std::cout << "[AI] Removing from pending queue..." << std::endl;
     {
         std::lock_guard<std::mutex> lock(request_mutex_);
         pending_requests_.erase(request.request_id);
     }
     
-    std::cout << "AI request processed: " << request.request_id 
+    std::cout << "[AI] Request processed: " << request.request_id 
               << " in " << response_time << "ms" << std::endl;
 }
 
@@ -777,6 +866,16 @@ bool AiService::httpPost(const std::string& url, const std::map<std::string, std
 #else
     // 简化实现：使用系统命令调用curl
     std::string temp_file = "/tmp/ai_response_" + std::to_string(std::time(nullptr)) + ".json";
+    std::string body_file = "/tmp/ai_body_" + std::to_string(std::time(nullptr)) + ".json";
+    
+    // 将body写入临时文件（避免单引号问题）
+    std::ofstream body_out(body_file);
+    if (!body_out.is_open()) {
+        std::cerr << "[AI] Failed to create body file: " << body_file << std::endl;
+        return false;
+    }
+    body_out << body;
+    body_out.close();
     
     std::ostringstream cmd;
     cmd << "curl -s -X POST " << url
@@ -788,24 +887,37 @@ bool AiService::httpPost(const std::string& url, const std::map<std::string, std
         }
     }
     
-    cmd << " -d '" << body << "'"
+    cmd << " -d @" << body_file
         << " -o " << temp_file
-        << " --connect-timeout " << timeout;
+        << " --connect-timeout " << timeout
+        << " --max-time " << (timeout + 5);
     
+    std::cout << "[AI] Executing curl command..." << std::endl;
+    std::cout << "[AI] Command: " << cmd.str().substr(0, 300) << "..." << std::endl;
     int ret = system(cmd.str().c_str());
+    std::cout << "[AI] curl returned: " << ret << std::endl;
+    
+    // 删除body临时文件
+    std::remove(body_file.c_str());
     
     if (ret == 0) {
+        std::cout << "[AI] Reading response from: " << temp_file << std::endl;
         std::ifstream file(temp_file);
         if (file.is_open()) {
             std::ostringstream oss;
             oss << file.rdbuf();
             response = oss.str();
             file.close();
+            std::cout << "[AI] Response length: " << response.length() << std::endl;
             
             // 删除临时文件
             std::remove(temp_file.c_str());
             return true;
+        } else {
+            std::cerr << "[AI] Failed to open response file: " << temp_file << std::endl;
         }
+    } else {
+        std::cerr << "[AI] curl failed with code: " << ret << std::endl;
     }
     
     return false;
@@ -817,10 +929,14 @@ bool AiService::httpPost(const std::string& url, const std::map<std::string, std
  */
 bool AiService::parseAIResponse(const std::string& response, std::string& content) {
     try {
+        std::cout << "[AI] Parsing response, length=" << response.length() << std::endl;
+        
         // 解析OpenAI格式的响应
         // {"choices":[{"message":{"content":"..."}}]}
         
         std::string choices = getJsonValue(response, "choices");
+        std::cout << "[AI] Choices: " << (choices.empty() ? "empty" : choices.substr(0, 100)) << std::endl;
+        
         if (choices.empty()) {
             // 尝试解析其他格式
             content = getJsonValue(response, "content");
@@ -830,23 +946,32 @@ bool AiService::parseAIResponse(const std::string& response, std::string& conten
                     content = getJsonValue(response, "text");
                 }
             }
+            std::cout << "[AI] Direct content: " << (content.empty() ? "empty" : content.substr(0, 100)) << std::endl;
             return !content.empty();
         }
         
         // 解析choices数组
         if (choices[0] == '[') {
+            std::cout << "[AI] Choices is array, finding message..." << std::endl;
             // 找到第一个message对象
             size_t msg_pos = choices.find("\"message\"");
+            std::cout << "[AI] message pos: " << msg_pos << std::endl;
             if (msg_pos != std::string::npos) {
                 std::string message = choices.substr(msg_pos);
+                std::cout << "[AI] message string: " << message.substr(0, 100) << std::endl;
                 content = getJsonValue(message, "content");
+                std::cout << "[AI] Content from message: " << (content.empty() ? "empty" : content.substr(0, 100)) << std::endl;
                 return !content.empty();
             }
         }
         
+        std::cerr << "[AI] Failed to parse choices" << std::endl;
         return false;
     } catch (const std::exception& e) {
-        std::cerr << "Parse AI response error: " << e.what() << std::endl;
+        std::cerr << "[AI] Parse error: " << e.what() << std::endl;
+        return false;
+    } catch (...) {
+        std::cerr << "[AI] Unknown parse error" << std::endl;
         return false;
     }
 }

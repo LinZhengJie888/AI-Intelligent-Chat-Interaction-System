@@ -350,6 +350,20 @@ def run_single_test(test_name):
             user_id = input("请输入你的用户ID: ")
             question = input("请输入问题: ")
             client.test_ai_request(user_id, "", question)
+            # 等待服务端异步推送的 AI 回复，最多等待 15 秒
+            try:
+                client.sock.settimeout(15.0)
+                while True:
+                    data = client.sock.recv(4096)
+                    if not data:
+                        break
+                    try:
+                        text = data.decode('utf-8')
+                    except Exception:
+                        text = str(data)
+                    print(f"[接收推送] {text}")
+            except socket.timeout:
+                pass
             
         else:
             print(f"未知测试: {test_name}")

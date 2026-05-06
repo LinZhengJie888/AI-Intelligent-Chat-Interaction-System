@@ -229,7 +229,8 @@ private:
      * @param is_group 是否是群聊
      */
     void sendAIResponse(const std::string& user_id, const std::string& target_id, 
-                       const std::vector<std::string>& messages, bool is_group);
+                       const std::vector<std::string>& messages, bool is_group,
+                       const std::string& origin_user_id);
     
     /**
      * @brief 异步处理AI请求

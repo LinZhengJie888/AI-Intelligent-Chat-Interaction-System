@@ -80,7 +80,9 @@ void Connection::onmessage()
         ssize_t nread = read(fd(), buffer, sizeof(buffer));
         if (nread > 0)      // 成功的读取到了数据。
         {
+            std::cout << "[Connection] fd=" << fd() << " read n=" << nread << std::endl;
             inputbuffer_.append(buffer,nread);      // 把读取的数据追加到接收缓冲区中。
+            std::cout << "[Connection] fd=" << fd() << " inputbuffer.size=" << inputbuffer_.size() << std::endl;
         } 
         else if (nread == -1 && errno == EINTR) // 读取数据的时候被信号中断，继续读取。
         {  
@@ -103,7 +105,8 @@ void Connection::onmessage()
         } 
         else if (nread == 0)  // 客户端连接已断开。
         {  
-            closecallback();                                  // 回调TcpServer::closecallback()。
+                std::cout << "[Connection] fd=" << fd() << " closed by peer" << std::endl;
+                closecallback();                                  // 回调TcpServer::closecallback()。
             break;
         }
     }
@@ -137,6 +140,7 @@ void Connection::send(const char *data,size_t size)
 // 发送数据，如果当前线程是IO线程，直接调用此函数，如果是工作线程，将把此函数传给IO线程去执行。
 void Connection::sendinloop(const char *data,size_t size)
 {
+    std::cout << "[Connection] sendinloop called fd=" << fd() << ", size=" << size << std::endl;
     outputbuffer_.appendwithsep(data,size);    // 把需要发送的数据保存到Connection的发送缓冲区中。
     clientchannel_->enablewriting();    // 注册写事件。
 }
@@ -145,6 +149,7 @@ void Connection::sendinloop(const char *data,size_t size)
 void Connection::writecallback()                   
 {
     int writen=::send(fd(),outputbuffer_.data(),outputbuffer_.size(),0);    // 尝试把outputbuffer_中的数据全部发送出去。
+    std::cout << "[Connection] writecallback fd=" << fd() << ", try_send_len=" << outputbuffer_.size() << ", writen=" << writen << std::endl;
     if (writen>0) outputbuffer_.erase(0,writen);                                        // 从outputbuffer_中删除已成功发送的字节数。
 
     // 如果发送缓冲区中没有数据了，表示数据已发送完成，不再关注写事件。

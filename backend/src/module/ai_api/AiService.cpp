@@ -7,6 +7,7 @@
 #include "module/Database.h"
 #include "module/Config.h"
 #include "module/ChatService.h"
+#include "module/redis/RedisClient.h"
 #include "model/ChatRecord.h"
 #include "model/ChatRecordDAO.h"
 #include "common/Util.h"
@@ -19,6 +20,8 @@
 #include <chrono>
 #include <thread>
 #include <regex>
+#include <unistd.h>
+#include <fcntl.h>
 
 // 简化的HTTP客户端实现（实际项目中应使用libcurl等库）
 #ifdef USE_CURL
@@ -213,6 +216,11 @@ bool AiService::init() {
     std::cout << "AiService initialized successfully" << std::endl;
     std::cout << "AI API URL: " << (config_.api_url.empty() ? "Not configured" : config_.api_url) << std::endl;
     std::cout << "AI Model: " << config_.model << std::endl;
+
+    // 初始化 Redis 客户端（用于 AI 回复缓存等）
+    Config& conf = Config::getInstance();
+    const auto& redis_conf = conf.getRedisConfig();
+    RedisClient::getInstance().init(redis_conf.host, redis_conf.port);
     
     return true;
 }
@@ -590,16 +598,29 @@ int AiService::cleanExpiredCache() {
  */
 bool AiService::getCachedResponse(const std::string& question, std::string& response) {
     std::lock_guard<std::mutex> lock(cache_mutex_);
-    
+    // 1) 本地内存缓存
     auto it = response_cache_.find(question);
     if (it != response_cache_.end()) {
-        // 检查是否过期
         std::time_t now = std::time(nullptr);
         if (now - it->second.second < CACHE_EXPIRE_HOURS * 3600) {
             response = it->second.first;
             return true;
         }
     }
+
+    // 2) Redis 缓存（更快）
+    try {
+        std::string key = "ai:hot_question:" + util::md5(question);
+        if (RedisClient::getInstance().isConnected()) {
+            std::string r = RedisClient::getInstance().get(key);
+            if (!r.empty()) {
+                response = r;
+                // 更新内存缓存
+                response_cache_[question] = std::make_pair(response, std::time(nullptr));
+                return true;
+            }
+        }
+    } catch (...) {}
     
     // 从数据库查找
     char sql[4096];
@@ -622,6 +643,13 @@ bool AiService::getCachedResponse(const std::string& question, std::string& resp
         response_cache_[question] = std::make_pair(response, std::time(nullptr));
         
         db_.freeResult(res);
+        // 同时将结果写入 Redis（加速后续查询）
+        try {
+            std::string key = "ai:hot_question:" + util::md5(question);
+            RedisClient::getInstance().setex(key, CACHE_EXPIRE_HOURS * 3600, response);
+        } catch (...) {
+            // 忽略 Redis 失败
+        }
         return true;
     }
     
@@ -638,8 +666,15 @@ bool AiService::cacheResponse(const std::string& question, const std::string& re
         std::lock_guard<std::mutex> lock(cache_mutex_);
         response_cache_[question] = std::make_pair(response, std::time(nullptr));
     }
-    
-    // 跳过数据库缓存（避免SQL注入问题）
+    // 写入 Redis（避开数据库写入以减少延迟）
+    try {
+        std::string key = "ai:hot_question:" + util::md5(question);
+        if (RedisClient::getInstance().isConnected()) {
+            RedisClient::getInstance().setex(key, CACHE_EXPIRE_HOURS * 3600, response);
+        }
+    } catch (...) {
+        // 忽略 Redis 写入错误
+    }
     return true;
 }
 
@@ -741,13 +776,21 @@ void AiService::sendAIResponse(const std::string& user_id, const std::string& ta
 
         std::string msg_str = oss.str();
 
+        // 将 AI 原始消息包装为统一响应格式（与 ChatService::buildResponse 相同）
+        std::ostringstream wrapper;
+        wrapper << "{"
+                << "\"type\":" << (is_group ? 34 : 40)
+                << ",\"code\":0,\"msg\":\"\""
+                << ",\"data\":" << msg_str
+                << ",\"timestamp\":\"" << util::getCurrentTime() << "\"} ";
+
+        std::string notification = wrapper.str();
+
         if (is_group) {
-            // 群聊消息广播
-            chat_service.broadcastToGroup(target_id, msg_str);
+            chat_service.broadcastToGroup(target_id, notification);
         } else {
-            // 私聊消息推送：直接发送给发起请求的用户
             std::cout << "[AI] Sending response to origin user " << origin_user_id << std::endl;
-            chat_service.broadcastToUser(origin_user_id, msg_str);
+            chat_service.broadcastToUser(origin_user_id, notification);
         }
 
         // 保存到聊天记录（使用数字ID）
@@ -858,69 +901,91 @@ bool AiService::httpPost(const std::string& url, const std::map<std::string, std
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, chunk);
     
     CURLcode res = curl_easy_perform(curl);
-    
+
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
     curl_slist_free_all(chunk);
     curl_easy_cleanup(curl);
-    
-    return (res == CURLE_OK);
+
+    std::cout << "[AI] curl result: res=" << res << ", http_code=" << http_code
+              << ", response_len=" << response.size() << std::endl;
+
+    // 要求 libcurl 执行成功、HTTP 200 且响应体非空才视为成功
+    if (res == CURLE_OK && http_code >= 200 && http_code < 300 && !response.empty()) {
+        return true;
+    }
+
+    // 记录失败原因到 stderr
+    if (res != CURLE_OK) {
+        std::cerr << "[AI] curl perform error: " << curl_easy_strerror(res) << std::endl;
+    } else {
+        std::cerr << "[AI] HTTP non-2xx or empty response: code=" << http_code << ", len=" << response.size() << std::endl;
+    }
+
+    return false;
 #else
     // 简化实现：使用系统命令调用curl
-    std::string temp_file = "/tmp/ai_response_" + std::to_string(std::time(nullptr)) + ".json";
-    std::string body_file = "/tmp/ai_body_" + std::to_string(std::time(nullptr)) + ".json";
-    
-    // 将body写入临时文件（避免单引号问题）
-    std::ofstream body_out(body_file);
-    if (!body_out.is_open()) {
-        std::cerr << "[AI] Failed to create body file: " << body_file << std::endl;
+    // 使用 mkstemp 创建唯一临时文件以避免并发冲突
+    char body_template[] = "/tmp/ai_body_XXXXXX";
+    int body_fd = mkstemp(body_template);
+    if (body_fd == -1) {
+        std::cerr << "[AI] Failed to create body temp file" << std::endl;
         return false;
     }
-    body_out << body;
-    body_out.close();
-    
+
+    // 将 body 写入临时文件
+    ssize_t written = write(body_fd, body.c_str(), static_cast<size_t>(body.size()));
+    (void)written;
+    close(body_fd);
+
+    char resp_template[] = "/tmp/ai_response_XXXXXX";
+    int resp_fd = mkstemp(resp_template);
+    if (resp_fd == -1) {
+        std::cerr << "[AI] Failed to create response temp file" << std::endl;
+        // 清理 body 文件
+        ::unlink(body_template);
+        return false;
+    }
+    close(resp_fd);
+
     std::ostringstream cmd;
-    cmd << "curl -s -X POST " << url
+    cmd << "curl -sS -X POST '" << url << "'"
         << " -H 'Content-Type: application/json'";
-    
+
     for (const auto& header : headers) {
         if (header.first != "Content-Type") {
             cmd << " -H '" << header.first << ": " << header.second << "'";
         }
     }
-    
-    cmd << " -d @" << body_file
-        << " -o " << temp_file
+
+    cmd << " -d @" << body_template
+        << " -o " << resp_template
         << " --connect-timeout " << timeout
         << " --max-time " << (timeout + 5);
-    
+
     std::cout << "[AI] Executing curl command..." << std::endl;
     std::cout << "[AI] Command: " << cmd.str().substr(0, 300) << "..." << std::endl;
     int ret = system(cmd.str().c_str());
     std::cout << "[AI] curl returned: " << ret << std::endl;
-    
-    // 删除body临时文件
-    std::remove(body_file.c_str());
-    
-    if (ret == 0) {
-        std::cout << "[AI] Reading response from: " << temp_file << std::endl;
-        std::ifstream file(temp_file);
-        if (file.is_open()) {
-            std::ostringstream oss;
-            oss << file.rdbuf();
-            response = oss.str();
-            file.close();
-            std::cout << "[AI] Response length: " << response.length() << std::endl;
-            
-            // 删除临时文件
-            std::remove(temp_file.c_str());
-            return true;
-        } else {
-            std::cerr << "[AI] Failed to open response file: " << temp_file << std::endl;
-        }
+
+    // 读取并清理临时文件
+    std::ifstream file(resp_template);
+    if (ret == 0 && file.is_open()) {
+        std::ostringstream oss;
+        oss << file.rdbuf();
+        response = oss.str();
+        file.close();
+        std::cout << "[AI] Response length: " << response.length() << std::endl;
     } else {
-        std::cerr << "[AI] curl failed with code: " << ret << std::endl;
+        std::cerr << "[AI] curl command failed or response file not readable: code=" << ret << std::endl;
     }
-    
-    return false;
+
+    // 删除临时文件
+    ::unlink(body_template);
+    ::unlink(resp_template);
+
+    return (ret == 0 && !response.empty());
 #endif
 }
 

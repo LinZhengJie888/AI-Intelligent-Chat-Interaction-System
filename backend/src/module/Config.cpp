@@ -44,6 +44,10 @@ Config::Config() {
     server_config_.port = 8080;
     server_config_.thread_pool_size = 4;
     server_config_.avatar_storage_path = "./backend/static/avatars";
+
+    // Redis 默认配置
+    redis_config_.host = "127.0.0.1";
+    redis_config_.port = 6379;
 }
 
 /**
@@ -79,6 +83,10 @@ const ServerConfig& Config::getServerConfig() const {
     return server_config_;
 }
 
+const RedisConfig& Config::getRedisConfig() const {
+    return redis_config_;
+}
+
 /**
  * @brief 设置数据库配置
  * @param config 数据库配置
@@ -101,6 +109,10 @@ void Config::setAIConfig(const AIConfig& config) {
  */
 void Config::setServerConfig(const ServerConfig& config) {
     server_config_ = config;
+}
+
+void Config::setRedisConfig(const RedisConfig& config) {
+    redis_config_ = config;
 }
 
 /**
@@ -151,6 +163,9 @@ bool Config::loadFromFile(const std::string& filename) {
                 if (key == "port") server_config_.port = std::stoi(value);
                 else if (key == "thread_pool_size") server_config_.thread_pool_size = std::stoi(value);
                 else if (key == "avatar_storage_path") server_config_.avatar_storage_path = value;
+            } else if (current_section == "redis") {
+                if (key == "host") redis_config_.host = value;
+                else if (key == "port") redis_config_.port = std::stoi(value);
             }
         }
     }
@@ -191,6 +206,9 @@ bool Config::saveToFile(const std::string& filename) {
     file << "port = " << server_config_.port << "\n";
     file << "thread_pool_size = " << server_config_.thread_pool_size << "\n";
     file << "avatar_storage_path = " << server_config_.avatar_storage_path << "\n";
+    file << "\n[redis]\n";
+    file << "host = " << redis_config_.host << "\n";
+    file << "port = " << redis_config_.port << "\n";
     
     file.close();
     return true;

@@ -58,6 +58,24 @@
 - 存储用户信息、聊天记录、好友请求、动态验证码等数据
 - Redis缓存高频数据及验证码，提升响应速度
 
+### Redis 在项目中的具体作用（已实现）
+
+- AI 回复缓存：对高频问题的 AI 响应使用 Redis 缓存（key: `ai:hot_question:<md5(question)>`），优先从 Redis 读取，命中则直接返回，未命中时调用 AI API，结果写入 Redis（可配置过期时间），减少重复 API 调用并加速响应。
+- 用户信息缓存：对 `findByUserId` 查询使用 Redis 缓存（key: `user:user_id:<user_id>`），登录/查询优先从 Redis 获取，插入/更新/删除时同步写入或删除 Redis 缓存，加速用户查找与设置读取。
+- 最近聊天记录（辅助缓存）：在 `ChatRecordDAO::insert` 中将新消息写入 Redis 列表（key: `chat:pair:<a>:<b>` 或 `chat:group:<group_id>`），用于快速获取最近消息（LRANGE）。为安全起见，数据库仍为主存储，Redis 作为热点数据缓存。
+- (可扩展) 验证码、好友请求、群聊成员等也可使用 Redis 缓存以提高并发性能，相关配置和键名预留在 `Config` 与代码中。
+
+已改动的代码文件（主要）：
+
+- `backend/include/module/redis/RedisClient.h`、`backend/src/module/redis/RedisClient.cpp`：封装 hiredis 的简易客户端，提供 `get/set/setex/del/lpush/lrange` 等方法。
+- `backend/src/module/Config.cpp`、`backend/include/module/Config.h`：增加 `RedisConfig`，从 `config.ini` 加载 Redis 配置。
+- `config.ini`：新增 `[redis]` 配置节（host/port）。
+- `backend/src/module/ai_api/AiService.cpp`：AI 缓存优先读取 Redis，调用成功后写入 Redis，且继续保留内存缓存与数据库日志。
+- `backend/src/model/UserDAO.cpp`：查询优先读取 Redis 缓存，插入/更新/删除时同步更新/删除 Redis 缓存。
+- `backend/src/model/ChatRecordDAO.cpp`：在插入聊天记录后，将消息摘要写入 Redis 列表以便快速获取最近消息。
+
+说明：Redis 作为缓存使用，数据库（MySQL）仍然是最终一致性的主存储；对缓存更新采取先写 DB 再写 Redis 的策略（在可能的路径中回退与容错）。本次实现以最小改动为主，后续可以按需扩展缓存策略（如 LRU、分片、持久化策略调整、更多 Redis 命令封装等）。
+
 ### 前端
 
 - HTML5 + CSS3 + JavaScript（基础版，简易适配网页端）

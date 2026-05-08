@@ -235,6 +235,8 @@ void ChatService::handleClose(spConnection conn) {
  * @brief 处理消息
  */
 void ChatService::handleMessage(spConnection conn, std::string& message) {
+    std::cout << "[ChatService] Received raw message (len=" << message.size() << "): "
+              << (message.size() > 200 ? message.substr(0,200) + "..." : message) << std::endl;
     if (!initialized_) {
         sendResponse(conn, 0, -1, "Service not initialized");
         return;
@@ -244,6 +246,18 @@ void ChatService::handleMessage(spConnection conn, std::string& message) {
     if (!parseMessage(message, msg)) {
         sendResponse(conn, 0, -1, "Invalid message format");
         return;
+    }
+
+    // 如果消息中没有 from_user_id，尝试从 fd_to_user_ 中恢复
+    if (msg.from_user_id.empty()) {
+        std::lock_guard<std::mutex> lock(conn_mutex_);
+        auto it = fd_to_user_.find(conn->fd());
+        if (it != fd_to_user_.end() && !it->second.empty()) {
+            msg.from_user_id = it->second;
+            // 确保 user_connections_ 映射正确
+            user_connections_[msg.from_user_id] = conn;
+            std::cout << "[ChatService] Recovered from_user_id=" << msg.from_user_id << " for fd=" << conn->fd() << std::endl;
+        }
     }
     
     // 根据消息类型分发处理
@@ -377,8 +391,22 @@ std::string ChatService::buildResponse(int type, int code, const std::string& ms
 void ChatService::sendResponse(spConnection conn, int type, int code, 
                                const std::string& msg, const std::string& data) {
     std::string response = buildResponse(type, code, msg, data);
+    // 使用换行作为报文分隔符，客户端可按行解析JSON对象，避免粘包问题。
+    response.push_back('\n');
     std::cout << "[ChatService] Sending response: " << response << std::endl;
-    conn->send(response.data(), response.size());
+    try {
+        conn->send(response.data(), response.size());
+    } catch (const std::exception& e) {
+        std::cerr << "[ChatService] Failed to send response to fd=" << conn->fd() << ": " << e.what()
+                  << ", response=" << response << std::endl;
+        // 清理失效连接映射
+        std::lock_guard<std::mutex> lock(conn_mutex_);
+        auto it = fd_to_user_.find(conn->fd());
+        if (it != fd_to_user_.end()) {
+            user_connections_.erase(it->second);
+            fd_to_user_.erase(it);
+        }
+    }
 }
 
 /**
@@ -951,12 +979,16 @@ void ChatService::handleAiRequest(spConnection conn, const Message& msg) {
     std::string target_id = msg.to_user_id;
     std::string question = msg.content;
     bool is_group = (getJsonValue(msg.extra, "is_group") == "true");
+    std::cout << "[ChatService] handleAiRequest called: fd=" << conn->fd()
+              << ", from_user_id=" << user_id << ", to_user_id=" << target_id
+              << ", question(len)=" << question.size() << std::endl;
     
     // 确保用户连接已保存
     {
         std::lock_guard<std::mutex> lock(conn_mutex_);
         user_connections_[user_id] = conn;
         fd_to_user_[conn->fd()] = user_id;
+        std::cout << "[ChatService] Mapped fd=" << conn->fd() << " to user_id=" << user_id << std::endl;
     }
     
     // 如果没有指定目标，发送给自己
@@ -1032,7 +1064,9 @@ void ChatService::broadcastToUser(const std::string& user_id, const std::string&
     auto it = user_connections_.find(user_id);
     if (it != user_connections_.end()) {
         try {
-            it->second->send(message.data(), message.size());
+            std::string msg_with_nl = message;
+            if (msg_with_nl.empty() || msg_with_nl.back() != '\n') msg_with_nl.push_back('\n');
+            it->second->send(msg_with_nl.data(), msg_with_nl.size());
         } catch (const std::exception& e) {
             std::cerr << "[ChatService] Failed to send message to " << user_id << ": " << e.what() << std::endl;
             user_connections_.erase(it);
@@ -1055,7 +1089,9 @@ void ChatService::broadcastToGroup(const std::string& group_id, const std::strin
         
         auto it = user_connections_.find(member_user_id);
         if (it != user_connections_.end()) {
-            it->second->send(message.data(), message.size());
+            std::string msg_with_nl = message;
+            if (msg_with_nl.empty() || msg_with_nl.back() != '\n') msg_with_nl.push_back('\n');
+            it->second->send(msg_with_nl.data(), msg_with_nl.size());
         }
     }
 }

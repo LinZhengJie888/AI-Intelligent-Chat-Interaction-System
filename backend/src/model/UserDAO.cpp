@@ -5,7 +5,10 @@
 
 #include "model/UserDAO.h"
 #include "common/Util.h"
+#include "module/redis/RedisClient.h"
 #include <cstdio>
+#include <sstream>
+#include <vector>
 
 /**
  * @brief 构造函数
@@ -35,6 +38,18 @@ bool UserDAO::insert(User& user) {
     
     // 获取自增ID
     user.id = mysql_insert_id(db_.getConnection());
+    // 写入 Redis 缓存（短期）
+    try {
+        std::ostringstream oss;
+        oss << user.id << '\t' << user.user_id << '\t' << user.username << '\t' << user.nickname << '\t'
+            << user.password << '\t' << user.phone << '\t' << user.avatar_path << '\t'
+            << user.ai_nickname << '\t' << user.ai_tone << '\t' << user.ai_priority << '\t'
+            << user.create_time << '\t' << user.update_time;
+        std::string key = std::string("user:user_id:") + user.user_id;
+        if (RedisClient::getInstance().isConnected()) {
+            RedisClient::getInstance().setex(key, 3600, oss.str());
+        }
+    } catch (...) {}
     return true;
 }
 
@@ -52,8 +67,21 @@ bool UserDAO::update(const User& user) {
             user.username.c_str(), user.nickname.c_str(), user.password.c_str(),
             user.phone.c_str(), user.avatar_path.c_str(), user.ai_nickname.c_str(),
             user.ai_tone, user.ai_priority, (unsigned long)user.id);
-    
-    return db_.execute(sql);
+    bool ok = db_.execute(sql);
+    if (ok) {
+        try {
+            std::ostringstream oss;
+            oss << user.id << '\t' << user.user_id << '\t' << user.username << '\t' << user.nickname << '\t'
+                << user.password << '\t' << user.phone << '\t' << user.avatar_path << '\t'
+                << user.ai_nickname << '\t' << user.ai_tone << '\t' << user.ai_priority << '\t'
+                << user.create_time << '\t' << user.update_time;
+            std::string key = std::string("user:user_id:") + user.user_id;
+            if (RedisClient::getInstance().isConnected()) {
+                RedisClient::getInstance().setex(key, 3600, oss.str());
+            }
+        } catch (...) {}
+    }
+    return ok;
 }
 
 /**
@@ -64,7 +92,28 @@ bool UserDAO::update(const User& user) {
 bool UserDAO::remove(uint64_t id) {
     char sql[256];
     snprintf(sql, sizeof(sql), "DELETE FROM user WHERE id=%lu", (unsigned long)id);
-    return db_.execute(sql);
+    // 删除时同时删除 Redis 缓存（若存在）
+    // 先查询 user_id
+    char sel[256];
+    snprintf(sel, sizeof(sel), "SELECT user_id FROM user WHERE id=%lu", (unsigned long)id);
+    MYSQL_RES* res = db_.query(sel);
+    std::string user_id;
+    if (res) {
+        MYSQL_ROW row = mysql_fetch_row(res);
+        if (row && row[0]) user_id = row[0];
+        db_.freeResult(res);
+    }
+
+    bool ok = db_.execute(sql);
+    if (ok && !user_id.empty()) {
+        try {
+            std::string key = std::string("user:user_id:") + user_id;
+            if (RedisClient::getInstance().isConnected()) {
+                RedisClient::getInstance().del(key);
+            }
+        } catch (...) {}
+    }
+    return ok;
 }
 
 /**
@@ -109,6 +158,40 @@ User* UserDAO::findById(uint64_t id) {
  * @return 用户对象指针，未找到返回nullptr（调用者负责释放内存）
  */
 User* UserDAO::findByUserId(const std::string& user_id) {
+    // 优先尝试从 Redis 读取缓存
+    try {
+        std::string key = std::string("user:user_id:") + user_id;
+        if (RedisClient::getInstance().isConnected()) {
+            std::string cached = RedisClient::getInstance().get(key);
+            if (!cached.empty()) {
+                // 解析缓存（使用 '\t' 分隔字段）
+                std::vector<std::string> parts;
+                std::istringstream iss(cached);
+                std::string token;
+                while (std::getline(iss, token, '\t')) parts.push_back(token);
+                if (parts.size() >= 12) {
+                    User* user = new User();
+                    user->id = strtoull(parts[0].c_str(), nullptr, 10);
+                    user->user_id = parts[1];
+                    user->username = parts[2];
+                    user->nickname = parts[3];
+                    user->password = parts[4];
+                    user->phone = parts[5];
+                    user->avatar_path = parts[6];
+                    user->ai_nickname = parts[7];
+                    user->ai_tone = parts[8].empty() ? 0 : atoi(parts[8].c_str());
+                    user->ai_priority = parts[9].empty() ? 0 : atoi(parts[9].c_str());
+                    user->create_time = parts[10];
+                    user->update_time = parts[11];
+                    return user;
+                }
+            }
+        }
+    } catch (...) {
+        // 忽略 Redis 错误，回退到数据库
+    }
+
+    // 回退到数据库查询
     char sql[256];
     snprintf(sql, sizeof(sql), "SELECT * FROM user WHERE user_id='%s'", user_id.c_str());
     
@@ -136,6 +219,22 @@ User* UserDAO::findByUserId(const std::string& user_id) {
     user->update_time = row[11] ? row[11] : "";
     
     db_.freeResult(res);
+
+    // 将查询结果写入 Redis 缓存
+    try {
+        std::ostringstream oss;
+        oss << user->id << '\t' << user->user_id << '\t' << user->username << '\t' << user->nickname << '\t'
+            << user->password << '\t' << user->phone << '\t' << user->avatar_path << '\t'
+            << user->ai_nickname << '\t' << user->ai_tone << '\t' << user->ai_priority << '\t'
+            << user->create_time << '\t' << user->update_time;
+        std::string key = std::string("user:user_id:") + user->user_id;
+        if (RedisClient::getInstance().isConnected()) {
+            RedisClient::getInstance().setex(key, 3600, oss.str());
+        }
+    } catch (...) {
+        // 忽略 Redis 写入错误
+    }
+
     return user;
 }
 

@@ -26,7 +26,8 @@ MODULE_SRCS = ./backend/src/module/Database.cpp \
               ./backend/src/module/verify/VerifyService.cpp \
               ./backend/src/module/friend/FriendService.cpp \
               ./backend/src/module/friend/GroupService.cpp \
-              ./backend/src/module/ai_api/AiService.cpp
+              ./backend/src/module/ai_api/AiService.cpp \
+              ./backend/src/module/redis/RedisClient.cpp
 
 COMMON_SRCS = ./backend/src/common/Util.cpp
 
@@ -37,7 +38,7 @@ TARGET = ai_chat_server
 all: $(TARGET)
 
 $(TARGET): $(MAIN_SRC) $(REACTOR_SRCS) $(MODEL_SRCS) $(MODULE_SRCS) $(COMMON_SRCS)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $(TARGET) $(MAIN_SRC) $(REACTOR_SRCS) $(MODEL_SRCS) $(MODULE_SRCS) $(COMMON_SRCS) -lpthread -lmysqlclient -lcrypto -lcurl
+	$(CC) $(CFLAGS) $(INCLUDES) -o $(TARGET) $(MAIN_SRC) $(REACTOR_SRCS) $(MODEL_SRCS) $(MODULE_SRCS) $(COMMON_SRCS) -lpthread -lmysqlclient -lcrypto -lcurl -lhiredis
 
 clean:
 	rm -f $(TARGET)

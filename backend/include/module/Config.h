@@ -45,6 +45,15 @@ struct ServerConfig {
 };
 
 /**
+ * @struct RedisConfig
+ * @brief Redis 配置结构体
+ */
+struct RedisConfig {
+    std::string host; ///< Redis 主机
+    int port;         ///< Redis 端口
+};
+
+/**
  * @class Config
  * @brief 配置管理类（单例模式）
  */
@@ -73,6 +82,7 @@ public:
      * @return 服务器配置常量引用
      */
     const ServerConfig& getServerConfig() const;
+    const RedisConfig& getRedisConfig() const;
     
     /**
      * @brief 设置数据库配置
@@ -91,6 +101,7 @@ public:
      * @param config 服务器配置
      */
     void setServerConfig(const ServerConfig& config);
+    void setRedisConfig(const RedisConfig& config);
     
     /**
      * @brief 从文件加载配置
@@ -130,4 +141,5 @@ private:
     DBConfig db_config_;      ///< 数据库配置
     AIConfig ai_config_;      ///< AI配置
     ServerConfig server_config_; ///< 服务器配置
+    RedisConfig redis_config_; ///< Redis 配置
 };

@@ -5,6 +5,9 @@
 
 #include "model/ChatRecordDAO.h"
 #include <cstdio>
+#include "module/redis/RedisClient.h"
+#include <sstream>
+#include <algorithm>
 
 /**
  * @brief 构造函数
@@ -48,6 +51,39 @@ bool ChatRecordDAO::insert(ChatRecord& record) {
     
     // 获取自增ID
     record.id = mysql_insert_id(db_.getConnection());
+    // 同步写入 Redis 列表缓存（用于快速获取最近消息）
+    try {
+        // 如果是私聊，使用两个用户的有序key；如果是群聊，使用群聊key
+        std::string key;
+        if (record.group_id > 0) {
+            key = "chat:group:" + std::to_string(record.group_id);
+        } else {
+            uint64_t a = record.sender_id;
+            uint64_t b = record.receiver_id;
+            if (a == 0 || b == 0) {
+                // 无效，跳过
+            } else {
+                if (a < b) key = "chat:pair:" + std::to_string(a) + ":" + std::to_string(b);
+                else key = "chat:pair:" + std::to_string(b) + ":" + std::to_string(a);
+            }
+        }
+
+        if (!key.empty() && RedisClient::getInstance().isConnected()) {
+            // 以制表符分隔字段，便于解析（id\tsender\treceiver\tgroup\tcontent\tmsg_type\tis_ai\tis_recalled\tis_read\tsend_time）
+            std::ostringstream oss;
+            // sanitize content: replace tabs/newlines with spaces
+            std::string content_s = record.content;
+            std::replace(content_s.begin(), content_s.end(), '\t', ' ');
+            std::replace(content_s.begin(), content_s.end(), '\n', ' ');
+            std::replace(content_s.begin(), content_s.end(), '\r', ' ');
+            oss << record.id << '\t' << record.sender_id << '\t' << record.receiver_id << '\t' << record.group_id
+                << '\t' << content_s << '\t' << record.msg_type << '\t' << record.is_ai
+                << '\t' << record.is_recalled << '\t' << record.is_read << '\t' << record.send_time;
+            RedisClient::getInstance().lpush(key, oss.str());
+        }
+    } catch (...) {
+        // ignore redis errors
+    }
     return true;
 }
 

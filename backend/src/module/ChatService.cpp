@@ -391,8 +391,6 @@ std::string ChatService::buildResponse(int type, int code, const std::string& ms
 void ChatService::sendResponse(spConnection conn, int type, int code, 
                                const std::string& msg, const std::string& data) {
     std::string response = buildResponse(type, code, msg, data);
-    // 使用换行作为报文分隔符，客户端可按行解析JSON对象，避免粘包问题。
-    response.push_back('\n');
     std::cout << "[ChatService] Sending response: " << response << std::endl;
     try {
         conn->send(response.data(), response.size());
@@ -1064,9 +1062,7 @@ void ChatService::broadcastToUser(const std::string& user_id, const std::string&
     auto it = user_connections_.find(user_id);
     if (it != user_connections_.end()) {
         try {
-            std::string msg_with_nl = message;
-            if (msg_with_nl.empty() || msg_with_nl.back() != '\n') msg_with_nl.push_back('\n');
-            it->second->send(msg_with_nl.data(), msg_with_nl.size());
+            it->second->send(message.data(), message.size());
         } catch (const std::exception& e) {
             std::cerr << "[ChatService] Failed to send message to " << user_id << ": " << e.what() << std::endl;
             user_connections_.erase(it);
@@ -1089,9 +1085,7 @@ void ChatService::broadcastToGroup(const std::string& group_id, const std::strin
         
         auto it = user_connections_.find(member_user_id);
         if (it != user_connections_.end()) {
-            std::string msg_with_nl = message;
-            if (msg_with_nl.empty() || msg_with_nl.back() != '\n') msg_with_nl.push_back('\n');
-            it->second->send(msg_with_nl.data(), msg_with_nl.size());
+            it->second->send(message.data(), message.size());
         }
     }
 }

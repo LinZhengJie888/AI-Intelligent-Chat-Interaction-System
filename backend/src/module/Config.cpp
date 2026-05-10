@@ -39,6 +39,8 @@ Config::Config() {
     ai_config_.default_nickname = "AI助手";
     ai_config_.default_tone = 0;
     ai_config_.default_priority = 0;
+    ai_config_.timeout = 30;
+    ai_config_.connect_timeout = 10;
     
     // 服务器默认配置
     server_config_.port = 8080;

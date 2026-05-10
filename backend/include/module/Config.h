@@ -32,6 +32,8 @@ struct AIConfig {
     std::string default_nickname; ///< AI默认昵称
     int default_tone;             ///< AI默认语气
     int default_priority;         ///< AI默认响应优先级
+    int timeout;                  ///< AI请求超时时间（秒）
+    int connect_timeout;          ///< AI连接超时时间（秒）
 };
 
 /**

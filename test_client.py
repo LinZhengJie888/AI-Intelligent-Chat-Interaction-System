@@ -9,6 +9,7 @@ import socket
 import json
 import time
 import sys
+import struct
 
 class ChatClient:
     def __init__(self, host='127.0.0.1', port=8080):
@@ -16,27 +17,90 @@ class ChatClient:
         self.port = port
         self.sock = None
         self.user_id = None
+        self._recv_buffer = b""  # 接收缓冲区，用于处理TCP粘包（bytes类型）
         
-    def connect(self):
-        """连接服务器"""
-        try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.connect((self.host, self.port))
-            print(f"[✓] 已连接到服务器 {self.host}:{self.port}")
-            return True
-        except Exception as e:
-            print(f"[✗] 连接失败: {e}")
-            return False
+    def connect(self, max_retries=3):
+        """连接服务器（带重试）"""
+        for attempt in range(max_retries):
+            try:
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)  # 禁用Nagle算法
+                self.sock.connect((self.host, self.port))
+                self._recv_buffer = b""  # 清空接收缓冲区
+                time.sleep(0.2)  # 等待服务端事件循环就绪
+                print(f"[✓] 已连接到服务器 {self.host}:{self.port}")
+                return True
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"[!] 连接失败，重试 {attempt + 2}/{max_retries}...")
+                    time.sleep(0.5)
+                else:
+                    print(f"[✗] 连接失败: {e}")
+                    return False
     
     def disconnect(self):
         """断开连接"""
         if self.sock:
             self.sock.close()
             self.sock = None
+            self._recv_buffer = b""  # 使用bytes类型
             print("[✓] 已断开连接")
     
+    def _recv_exact(self, nbytes, timeout=10.0):
+        """
+        精确接收指定字节数的数据
+        处理TCP粘包/拆包问题
+        """
+        self.sock.settimeout(timeout)
+        while len(self._recv_buffer) < nbytes:
+            try:
+                data = self.sock.recv(4096)
+                if not data:
+                    return None  # 连接已关闭
+                self._recv_buffer += data
+            except socket.timeout:
+                return None  # 超时
+            except Exception as e:
+                print(f"[错误] 接收数据失败: {e}")
+                return None
+        
+        # 从缓冲区取出所需数据
+        result = self._recv_buffer[:nbytes]
+        self._recv_buffer = self._recv_buffer[nbytes:]
+        return result
+    
+    def recv_message(self, timeout=10.0):
+        """
+        接收一条完整消息（4字节长度头 + JSON消息体）
+        返回解析后的dict，超时或连接关闭返回None
+        """
+        # 读取4字节长度头
+        header = self._recv_exact(4, timeout)
+        if header is None:
+            return None
+        
+        # 解析长度（网络字节序，大端）
+        msg_len = struct.unpack('!I', header)[0]
+        
+        # 安全检查
+        if msg_len > 1024 * 1024:  # 限制消息最大1MB
+            print(f"[错误] 消息长度过大: {msg_len}")
+            return None
+        
+        # 读取消息体
+        body = self._recv_exact(msg_len, timeout)
+        if body is None:
+            return None
+        
+        # 解析JSON
+        try:
+            return json.loads(body.decode('utf-8'))
+        except json.JSONDecodeError as e:
+            print(f"[警告] JSON解析失败: {body[:100]}...")
+            return None
+    
     def send_message(self, msg_type, from_user_id="", to_user_id="", content="", extra=None):
-        """发送消息"""
+        """发送消息（4字节长度头 + JSON消息体）"""
         message = {
             "type": msg_type,
             "from_user_id": from_user_id,
@@ -46,14 +110,17 @@ class ChatClient:
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
         }
         
-        msg_str = json.dumps(message)
-        print(f"\n[发送] {msg_str}")
+        msg_bytes = json.dumps(message).encode('utf-8')
+        header = struct.pack('!I', len(msg_bytes))  # 4字节长度头（网络字节序）
+        
+        print(f"\n[发送] {json.dumps(message, ensure_ascii=False)}")
         
         try:
-            self.sock.send(msg_str.encode('utf-8'))
-            response = self.sock.recv(4096).decode('utf-8')
-            print(f"[接收] {response}")
-            return json.loads(response)
+            self.sock.sendall(header + msg_bytes)  # 发送长度头+消息体
+            response = self.recv_message(timeout=10.0)  # 接收响应
+            if response:
+                print(f"[接收] {json.dumps(response, ensure_ascii=False)}")
+            return response
         except Exception as e:
             print(f"[✗] 通信错误: {e}")
             return None
@@ -350,20 +417,29 @@ def run_single_test(test_name):
             user_id = input("请输入你的用户ID: ")
             question = input("请输入问题: ")
             client.test_ai_request(user_id, "", question)
-            # 等待服务端异步推送的 AI 回复，最多等待 15 秒
-            try:
-                client.sock.settimeout(15.0)
-                while True:
-                    data = client.sock.recv(4096)
-                    if not data:
-                        break
-                    try:
-                        text = data.decode('utf-8')
-                    except Exception:
-                        text = str(data)
-                    print(f"[接收推送] {text}")
-            except socket.timeout:
-                pass
+            # 等待服务端异步推送的 AI 回复，最多等待 30 秒
+            print("\n[等待AI回复...]")
+            start_time = time.time()
+            ai_messages = []
+            while time.time() - start_time < 30.0:
+                remaining = 30.0 - (time.time() - start_time)
+                if remaining <= 0:
+                    break
+                result = client.recv_message(timeout=min(remaining, 5.0))
+                if result is None:
+                    continue  # 超时或无数据，继续等待
+                # 打印收到的推送消息
+                print(f"[接收推送] {json.dumps(result, ensure_ascii=False)}")
+                ai_messages.append(result)
+                # 检查是否收到AI回复（type=40且from_user_id包含"小"或"AI"）
+                if result.get('type') == 40:
+                    content = result.get('data', {}).get('content', '') if 'data' in result else result.get('content', '')
+                    if content:
+                        print(f"  -> AI回复: {content}")
+            if not ai_messages:
+                print("[提示] 未收到任何AI回复")
+            else:
+                print(f"\n[完成] 共收到 {len(ai_messages)} 条消息")
             
         else:
             print(f"未知测试: {test_name}")

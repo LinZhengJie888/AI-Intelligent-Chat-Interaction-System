@@ -62,7 +62,7 @@ void TcpServer::newconnection(std::unique_ptr<Socket> clientsock)
     int idx = cfd % threadnum_;
     if (idx < 0) idx += threadnum_;
     EventLoop* destLoop = subloops_[idx].get();
-    spConnection conn(new Connection(destLoop, std::move(clientsock)));
+    spConnection conn(new Connection(destLoop, std::move(clientsock), 1));  // sep=1表示使用4字节长度头
     conn->setclosecallback(std::bind(&TcpServer::closeconnection,this,std::placeholders::_1));
     conn->seterrorcallback(std::bind(&TcpServer::errorconnection,this,std::placeholders::_1));
     conn->setonmessagecallback(std::bind(&TcpServer::onmessage,this,std::placeholders::_1,std::placeholders::_2));

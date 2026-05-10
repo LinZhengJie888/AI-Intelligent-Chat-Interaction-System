@@ -1,4 +1,5 @@
 #include "Buffer.h"
+#include <arpa/inet.h>  // for ntohl
 
 Buffer::Buffer(uint16_t sep):sep_(sep)
 {
@@ -25,7 +26,7 @@ void Buffer::append(const char *data,size_t size)
     }
     else if (sep_==1)     // 四字节的报头。
     {
-        uint32_t len32 = static_cast<uint32_t>(size);
+        uint32_t len32 = htonl(static_cast<uint32_t>(size));  // 将主机字节序转换为网络字节序（大端）
         buf_.append(reinterpret_cast<char*>(&len32), 4);           // 处理报文长度（头部），固定4字节。
         buf_.append(data,size);                    // 处理报文内容。
     }
@@ -73,6 +74,7 @@ bool Buffer::pickmessage(std::string &ss)
 
         uint32_t len32 = 0;
         memcpy(&len32, buf_.data(), sizeof(len32));             // 从buf_中获取报文头部（固定4字节）。
+        len32 = ntohl(len32);  // 将网络字节序（大端）转换为主机字节序
         int len = static_cast<int>(len32);
 
         // 简单边界检查，避免负数或超大分配导致越界/UB。

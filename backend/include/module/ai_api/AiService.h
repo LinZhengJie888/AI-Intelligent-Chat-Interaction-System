@@ -72,6 +72,7 @@ struct AIServiceConfig {
     std::string api_key;        ///< API密钥
     std::string model;          ///< 模型名称
     int timeout_seconds;        ///< 超时时间（秒）
+    int connect_timeout;        ///< 连接超时时间（秒）
     int max_retries;            ///< 最大重试次数
     int max_message_length;     ///< 单条消息最大长度
     bool enable_cache;          ///< 是否启用缓存
@@ -274,7 +275,8 @@ private:
     std::atomic<int> success_requests_;
     std::atomic<int> failed_requests_;
     
-    static const int DEFAULT_TIMEOUT = 10;          ///< 默认超时时间（秒）
+    static const int DEFAULT_TIMEOUT = 30;          ///< 默认超时时间（秒）
+    static const int DEFAULT_CONNECT_TIMEOUT = 10;  ///< 默认连接超时时间（秒）
     static const int DEFAULT_MAX_RETRIES = 3;       ///< 默认最大重试次数
     static const int DEFAULT_MAX_MESSAGE_LENGTH = 50;   ///< 默认单条消息最大长度
     static const int CACHE_EXPIRE_HOURS = 24;       ///< 缓存过期时间（小时）

@@ -165,6 +165,7 @@ AiService::AiService(Database& db)
     config_.api_key = "";
     config_.model = "gpt-3.5-turbo";
     config_.timeout_seconds = DEFAULT_TIMEOUT;
+    config_.connect_timeout = DEFAULT_CONNECT_TIMEOUT;
     config_.max_retries = DEFAULT_MAX_RETRIES;
     config_.max_message_length = DEFAULT_MAX_MESSAGE_LENGTH;
     config_.enable_cache = true;
@@ -890,7 +891,9 @@ bool AiService::httpPost(const std::string& url, const std::map<std::string, std
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, timeout);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config_.connect_timeout);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     
     // 设置请求头
     struct curl_slist* chunk = nullptr;

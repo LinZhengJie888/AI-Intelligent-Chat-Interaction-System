@@ -1,8 +1,9 @@
 # 前端设计方案 — Bento Dark UI
 
 > 适用项目：AI智能聊天互动系统
-> 前端技术栈：HTML5 + CSS3 + Vanilla JavaScript（无框架）
+> 前端技术栈：Vue3（Composition API） + Vite + HTML5 + CSS3 + JavaScript
 > 设计风格：沉浸式深色 BentoGrid + Glassmorphism
+> 架构设计：标准前后端分离，WebSocket 自定义 JSON 协议通信
 
 ---
 
@@ -20,9 +21,9 @@
 
 | 约束 | 设计对策 |
 |------|----------|
-| 纯 HTML/CSS/JS，无框架 | 组件以 HTML 模板片段 + JS 类实现，CSS 用 BEM 命名避免冲突 |
-| TCP 通信，非 HTTP | 前端通过 JS 封装 TCP 连接（WebSocket 桥接或直接 TCP），UI 层与通信层分离 |
-| 页面多（登录/聊天/请求/设置） | 采用 SPA 思路：单 `index.html` + JS 路由切换视图，避免多页面跳转 |
+| Vue3 组合式 API + Vite | 组件以 Vue SFC（Single-File Component）实现，Composition API 组织逻辑，CSS 用 scoped 样式避免冲突 |
+| WebSocket 通信 | 前端通过 api/ 目录封装 WebSocket 连接，UI 层与通信层分离，自定义 JSON 协议与后端交互 |
+| 页面多（登录/聊天/请求/设置） | 采用 Vue Router 单页面应用路由，views/ 目录管理不同页面视图，组件复用性强 |
 | 头像/验证码等静态资源 | 通过后端 `/static/` 路径引用，前端做加载态和 fallback |
 
 ---
@@ -863,41 +864,43 @@ font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Sego
 
 ```
 frontend/
-├── index.html                    # 单页入口
-├── css/
-│   ├── variables.css             # Design Tokens（颜色、间距、字体变量）
-│   ├── reset.css                 # CSS Reset
-│   ├── layout.css                # BentoGrid 布局
-│   ├── components.css            # 按钮、输入框、卡片、气泡等组件
-│   ├── pages/
-│   │   ├── landing.css           # 首页样式
-│   │   ├── auth.css              # 登录/注册页样式
-│   │   └── chat.css              # 聊天页样式
-│   └── animations.css            # 所有 @keyframes 和 transition 定义
-├── js/
-│   ├── app.js                    # 入口：路由、初始化
-│   ├── router.js                 # 简易 hash 路由
-│   ├── api.js                    # TCP/WebSocket 通信封装
-│   ├── state.js                  # 全局状态管理（当前用户、当前对话等）
+├── index.html                    # Vite 单页入口
+├── package.json                  # 项目依赖和脚本
+├── vite.config.js                # Vite 配置
+├── src/
+│   ├── main.js                   # Vue 应用入口
+│   ├── App.vue                   # 根组件
+│   ├── router/
+│   │   └── index.js              # Vue Router 配置
+│   ├── api/
+│   │   └── websocket.js          # WebSocket 通信封装
+│   ├── store/
+│   │   └── index.js              # 全局状态管理（当前用户、当前对话等）
+│   ├── views/
+│   │   ├── LandingPage.vue       # 首页视图
+│   │   ├── AuthPage.vue          # 登录/注册页视图
+│   │   └── ChatPage.vue          # 聊天页视图
 │   ├── components/
-│   │   ├── Sidebar.js            # 左侧导航栏组件
-│   │   ├── ChatList.js           # 聊天列表组件
-│   │   ├── MessageArea.js        # 消息区域组件
-│   │   ├── MessageBubble.js      # 单条消息气泡组件
-│   │   ├── InputBar.js           # 输入区域组件
-│   │   ├── ContactCard.js        # 联系人卡片组件
-│   │   ├── Modal.js              # 弹窗组件
-│   │   └── Avatar.js             # 头像组件
-│   ├── pages/
-│   │   ├── LandingPage.js        # 首页逻辑
-│   │   ├── AuthPage.js           # 登录/注册逻辑
-│   │   └── ChatPage.js           # 聊天页逻辑
-│   └── utils/
-│       ├── dom.js                # DOM 操作工具
-│       ├── time.js               # 时间格式化
-│       └── validator.js          # 表单校验
+│   │   ├── Sidebar.vue           # 左侧导航栏组件
+│   │   ├── ChatList.vue          # 聊天列表组件
+│   │   ├── MessageArea.vue       # 消息区域组件
+│   │   ├── MessageBubble.vue     # 单条消息气泡组件
+│   │   ├── InputBar.vue          # 输入区域组件
+│   │   ├── ContactCard.vue       # 联系人卡片组件
+│   │   ├── Modal.vue             # 弹窗组件
+│   │   └── Avatar.vue            # 头像组件
+│   ├── styles/
+│   │   ├── variables.css         # Design Tokens（颜色、间距、字体变量）
+│   │   ├── reset.css             # CSS Reset
+│   │   ├── layout.css            # BentoGrid 布局
+│   │   └── animations.css        # 所有 @keyframes 和 transition 定义
+│   ├── utils/
+│   │   ├── time.js               # 时间格式化
+│   │   └── validator.js          # 表单校验
+│   └── assets/
+│       └── icons/                # SVG 图标资源
 └── static/
-    └── icons/                    # SVG 图标资源
+    └── images/                   # 静态图片资源
 ```
 
 ---

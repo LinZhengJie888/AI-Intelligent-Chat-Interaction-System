@@ -1,0 +1,14 @@
+
+{
+  "name": "ai-chat-system",
+  "version": "1.0.0",
+  "description": "AI智能聊天互动系统",
+  "scripts": {
+    "dev:frontend": "cd frontend &amp;&amp; npm install &amp;&amp; npm run dev",
+    "dev:proxy": "node proxy-server.js",
+    "start": "npm run dev:proxy &amp; npm run dev:frontend"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}

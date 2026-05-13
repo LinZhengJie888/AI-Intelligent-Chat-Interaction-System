@@ -2,37 +2,106 @@
 
 ## 一、项目简介
 
-本项目采用标准前后端分离架构，按云服务器部署标准开发（验证演示时本地或局域网启动即可），核心实现实时聊天功能，支持群聊与好友一对一对话双模式，并集成AI聊天助手（API调用模式，不本地部署）。项目主要用于个人学习实践及C++后端开发工程师求职简历呈现，重点突出自研Reactor网络框架、前后端分离设计与工程化规范。整体设计轻量、稳定、易实现，完善覆盖AI API接入、好友添加逻辑、登录注册安全校验及AI回复规范等核心功能。
+本项目采用标准前后端分离架构，按云服务器部署标准开发（验证演示时本地或局域网启动即可），核心实现实时聊天功能，支持群聊与好友一对一对话双模式，并集成AI聊天助手（API调用模式，不本地部署）。
 
-**AI助手接入说明：**
+**项目用途：**
+- 个人学习实践
+- C++后端开发工程师求职简历呈现
 
-采用多厂商API兼容设计，通过调用各厂商AI API接口及对应密钥（key）完成接入，具体接入的API厂商及相关参数不在用户界面设置，仅在代码编写阶段确定，无需固定单一厂商，核心实现API调用、响应处理及回复规范控制逻辑；用户仅可在聊天框设置选项中对AI助手进行个性化修改（如昵称、语气），无需参与API相关配置。
+**核心特点：**
+- 自研 Reactor 网络框架（Epoll + 线程池）
+- 前后端分离，WebSocket 代理转发
+- 多厂商 AI API 兼容接入
+- 微信浅色风格 UI
 
 ---
 
-## 二、如何运行（验证演示：本地/局域网启动）
+## 二、项目结构
 
-本项目按云服务器部署架构开发，验证演示阶段无需部署至云服务器，仅需本地或局域网启动即可完成测试，步骤简洁，具体如下：
-
-### 1. 环境准备
-
-安装C++编译环境（支持C++11/14标准）、MySQL 5.7、Redis 6.0、Node.js 18+（用于前端开发）、网页端浏览器；提前预留AI API接入配置位（用于代码编写阶段填入确定的厂商API调用地址、密钥key等参数），无需提前确定具体接入厂商；准备动态验证码生成相关依赖（用于生成随机数字/字母验证码，以图像形式展示，用于辅助密码登录，无需AI参与）；准备头像上传相关依赖（支持jpg、png等常见格式，用于用户及群聊头像上传、压缩与存储）；
-
-### 2. 编译后端
-
-进入backend目录，执行编译命令（如make），编译自研Reactor网络框架及后端核心代码，重点包含AI API调用逻辑（兼容多厂商、可配置密钥）、登录注册密码校验与动态验证码逻辑、好友添加同意及加群申请审核逻辑、用户/群聊头像上传与修改逻辑、用户名/群名修改逻辑等核心功能；
-
-### 3. 部署数据库
-
-启动本地MySQL和Redis服务，执行db目录下的初始化脚本，完成数据库表创建与缓存配置，重点包含好友请求记录表、加群请求记录表、验证码记录表（存储动态验证码相关信息），确保用户头像路径、群聊头像路径、用户名、群名等信息可正常存储；
-
-### 4. 启动后端
-
-运行编译后的后端可执行文件，启动本地服务器，监听指定端口（如8080），配置AI API调用基础参数（预留厂商API地址、密钥配置项），测试API调用连通性（后续接入具体厂商后可直接验证）；
-
-### 5. 启动前端
-
-进入frontend目录，执行`npm install`安装依赖，然后执行`npm run dev`启动Vue3开发服务器；好友可在同一局域网内，通过浏览器访问前端开发服务器地址（如http://localhost:5173），进入登录/注册页面，完成登录或注册后即可使用所有功能，用于验证演示。
+```
+AI智能聊天互动系统/
+├── backend/                    # C++ 后端
+│   ├── include/                # 头文件
+│   │   ├── reactor/            # 自研 Reactor 网络框架
+│   │   │   ├── TcpServer.h     # TCP 服务器
+│   │   │   ├── EventLoop.h     # 事件循环
+│   │   │   ├── Connection.h    # 连接管理
+│   │   │   ├── Buffer.h        # 缓冲区（4字节长度头+JSON）
+│   │   │   ├── Channel.h       # 通道
+│   │   │   ├── Epoll.h         # Epoll 封装
+│   │   │   ├── Socket.h        # Socket 封装
+│   │   │   ├── Acceptor.h      # 连接接受器
+│   │   │   ├── ThreadPool.h    # 线程池
+│   │   │   └── Timestamp.h     # 时间戳
+│   │   ├── model/              # 数据模型
+│   │   │   ├── User.h          # 用户模型
+│   │   │   ├── UserDAO.h       # 用户数据访问
+│   │   │   ├── ChatRecordDAO.h # 聊天记录DAO
+│   │   │   └── GroupChatDAO.h  # 群聊DAO
+│   │   ├── module/             # 业务模块
+│   │   │   ├── ChatService.h   # 消息路由中心
+│   │   │   ├── Config.h        # 配置管理
+│   │   │   ├── Database.h      # 数据库连接
+│   │   │   ├── ai_api/         # AI API 调用模块
+│   │   │   │   └── AiService.h
+│   │   │   ├── verify/         # 动态验证码模块
+│   │   │   │   └── VerifyService.h
+│   │   │   ├── friend/         # 好友与群组模块
+│   │   │   │   ├── FriendService.h
+│   │   │   │   └── GroupService.h
+│   │   │   └── redis/          # Redis 客户端
+│   │   │       └── RedisClient.h
+│   │   └── common/             # 公共工具
+│   │       └── Util.h          # 工具函数（MD5等）
+│   ├── src/                    # 源文件（与 include 对应）
+│   │   ├── main.cpp            # 后端入口
+│   │   ├── reactor/            # Reactor 框架实现
+│   │   ├── model/              # 数据模型实现
+│   │   ├── module/             # 业务模块实现
+│   │   └── common/             # 工具实现
+│   └── static/                 # 静态资源（头像等）
+│       └── avatars/
+│
+├── frontend/                   # Vue3 前端
+│   ├── index.html              # 入口 HTML
+│   ├── package.json            # 依赖配置
+│   ├── vite.config.js          # Vite 配置（含 WebSocket 代理）
+│   └── src/
+│       ├── main.js             # Vue 应用入口
+│       ├── App.vue             # 根组件（页面切换）
+│       ├── api/
+│       │   └── websocket.js    # WebSocket 通信封装
+│       ├── store/
+│       │   └── index.js        # 全局状态管理
+│       ├── components/
+│       │   ├── Sidebar.vue     # 左侧导航栏
+│       │   ├── BottomNav.vue   # 底部导航栏（移动端）
+│       │   └── AIPet.vue       # AI 浮窗助手
+│       └── screens/
+│           ├── LoginScreen.vue       # 登录/注册页
+│           ├── ChatListScreen.vue    # 聊天列表页
+│           ├── SingleChatScreen.vue  # 单聊页
+│           ├── GroupChatScreen.vue   # 群聊页
+│           ├── AIChatScreen.vue      # AI 对话页
+│           ├── ContactsScreen.vue    # 通讯录页
+│           ├── GroupsScreen.vue      # 群聊列表页
+│           └── ProfileScreen.vue     # 个人资料页
+│
+├── db/                         # 数据库
+│   └── mysql/
+│       └── init.sql            # MySQL 初始化脚本
+│
+├── docs/                       # 文档
+│   ├── README.md               # 本文件
+│   ├── PRD.md                  # 产品需求文档
+│   ├── ARCHITECTURE.md         # 架构设计文档
+│   └── FRONTEND_DESIGN.md      # 前端设计方案
+│
+├── config.ini                  # 运行配置文件
+├── makefile                    # 后端编译脚本
+├── proxy-server.js             # WebSocket → TCP 代理服务器
+└── package.json                # 代理服务器依赖
+```
 
 ---
 
@@ -40,64 +109,390 @@
 
 ### 后端
 
-- C++（C++11/14标准）
-- 自研Reactor网络框架（手动复刻，无需第三方库）
-- Epoll事件驱动模型
-- 线程池任务调度
-- 按云服务器部署架构开发，预留云服务器部署相关配置（端口开放、安全组配置等），验证演示时本地/局域网启动即可
-- 集成多厂商AI API调用逻辑（可配置API地址、密钥key）
-- 动态验证码生成与图像展示逻辑
-- 好友添加同意逻辑
-- 登录注册密码校验逻辑
-- 用户/群聊头像上传与修改逻辑
-- 用户名/群名修改逻辑
-- 群成员查看逻辑
-
-### 数据存储
-
-- MySQL 5.7
-- Redis 6.0（本地部署用于验证演示，云服务器部署时可直接迁移至云服务器）
-- 存储用户信息、聊天记录、好友请求、动态验证码等数据
-- Redis缓存高频数据及验证码，提升响应速度
-
-### Redis 在项目中的具体作用（已实现）
-
-- AI 回复缓存：对高频问题的 AI 响应使用 Redis 缓存（key: `ai:hot_question:<md5(question)>`），优先从 Redis 读取，命中则直接返回，未命中时调用 AI API，结果写入 Redis（可配置过期时间），减少重复 API 调用并加速响应。
-- 用户信息缓存：对 `findByUserId` 查询使用 Redis 缓存（key: `user:user_id:<user_id>`），登录/查询优先从 Redis 获取，插入/更新/删除时同步写入或删除 Redis 缓存，加速用户查找与设置读取。
-- 最近聊天记录（辅助缓存）：在 `ChatRecordDAO::insert` 中将新消息写入 Redis 列表（key: `chat:pair:<a>:<b>` 或 `chat:group:<group_id>`），用于快速获取最近消息（LRANGE）。为安全起见，数据库仍为主存储，Redis 作为热点数据缓存。
-- (可扩展) 验证码、好友请求、群聊成员等也可使用 Redis 缓存以提高并发性能，相关配置和键名预留在 `Config` 与代码中。
-
-已改动的代码文件（主要）：
-
-- `backend/include/module/redis/RedisClient.h`、`backend/src/module/redis/RedisClient.cpp`：封装 hiredis 的简易客户端，提供 `get/set/setex/del/lpush/lrange` 等方法。
-- `backend/src/module/Config.cpp`、`backend/include/module/Config.h`：增加 `RedisConfig`，从 `config.ini` 加载 Redis 配置。
-- `config.ini`：新增 `[redis]` 配置节（host/port）。
-- `backend/src/module/ai_api/AiService.cpp`：AI 缓存优先读取 Redis，调用成功后写入 Redis，且继续保留内存缓存与数据库日志。
-- `backend/src/model/UserDAO.cpp`：查询优先读取 Redis 缓存，插入/更新/删除时同步更新/删除 Redis 缓存。
-- `backend/src/model/ChatRecordDAO.cpp`：在插入聊天记录后，将消息摘要写入 Redis 列表以便快速获取最近消息。
-
-说明：Redis 作为缓存使用，数据库（MySQL）仍然是最终一致性的主存储；对缓存更新采取先写 DB 再写 Redis 的策略（在可能的路径中回退与容错）。本次实现以最小改动为主，后续可以按需扩展缓存策略（如 LRU、分片、持久化策略调整、更多 Redis 命令封装等）。
+| 技术 | 说明 |
+|------|------|
+| C++11/14 | 核心语言 |
+| 自研 Reactor 框架 | Epoll + 线程池，无第三方依赖 |
+| MySQL 5.7 | 主数据库，存储用户、消息、好友关系等 |
+| Redis 6.0 | 缓存层，缓存高频数据和验证码 |
+| libcurl | HTTP 请求，用于调用 AI API |
+| OpenSSL | MD5 密码加密 |
 
 ### 前端
 
-- Vue3（Composition API组合式语法）
-- Vite构建工具
-- HTML5 + CSS3 + JavaScript
-- 沉浸式深色极简UI风格
-- 实现登录注册密码校验
-- 动态验证码图像展示与输入校验
-- 好友添加请求与同意界面
-- AI助手调用按键及聊天框内的AI设置选项
-- 用户头像上传与修改、群聊头像上传与修改
-- 用户名修改、群名修改界面
-- 群成员列表查看（显示成员头像、用户名、用户ID）
-- WebSocket自定义JSON协议与后端通信
+| 技术 | 说明 |
+|------|------|
+| Vue 3 | Composition API + `<script setup>` |
+| Vite 8 | 构建工具，支持热更新 |
+| WebSocket | 通过代理与后端 TCP 服务器通信 |
+| 微信浅色风格 | 绿色主色调，白色卡片，灰色背景 |
 
-### AI辅助
+### 通信架构
 
-- 全程采用API调用模式（不本地部署）
-- 兼容多厂商AI API，API及密钥在代码编写阶段确定，仅需在代码中修改API和key即可切换厂商
-- 实现AI助手多方式调用
-- 在聊天框选项中对AI进行修改和定义
-- 控制AI回复规范（简短、分条发送、速度与质量兼顾）
-- 不影响用户头像、群聊头像、用户名、群名相关操作及群成员查看功能
+```
+浏览器前端 ──WebSocket(8081)──► proxy-server.js ──TCP(8080)──► C++后端
+```
+
+- **前端**：发送/接收 4字节大端序长度头 + JSON
+- **代理**：透明转发，不解析内容
+- **后端**：Buffer 类 (sep=1) 解析报文
+
+### 报文格式
+
+```
+┌──────────────┬───────────────────┐
+│ 4字节长度头    │ JSON 字符串        │
+│ (大端序)      │ (UTF-8)           │
+└──────────────┴───────────────────┘
+```
+
+### 消息字段
+
+```json
+{
+  "type": 1,
+  "from_user_id": "user001",
+  "to_user_id": "user002",
+  "content": "消息内容",
+  "extra": "{}",
+  "timestamp": "1234567890"
+}
+```
+
+---
+
+## 四、核心功能
+
+### 4.1 用户系统
+
+| 功能 | 说明 |
+|------|------|
+| 注册 | 用户名 + 用户ID + 密码 + 手机号（选填） |
+| 登录 | 用户ID + 密码 + 动态验证码 |
+| 验证码 | 6位数字+字母，图像形式，5分钟有效，1分钟冷却 |
+| 密码加密 | MD5 加密存储 |
+
+### 4.2 聊天功能
+
+| 功能 | 说明 |
+|------|------|
+| 单聊 | 一对一私聊，消息实时推送 |
+| 群聊 | 多人群聊，支持群成员管理 |
+| AI 对话 | 按键调用或 @AI 召唤 |
+| 消息存储 | MySQL 持久化，Redis 缓存热点 |
+
+### 4.3 好友系统
+
+| 功能 | 说明 |
+|------|------|
+| 添加好友 | 输入用户ID，附验证消息 |
+| 请求审核 | 对方同意/拒绝，拒绝有冷却期 |
+| 好友列表 | 显示好友头像、用户名 |
+
+### 4.4 群聊系统
+
+| 功能 | 说明 |
+|------|------|
+| 创建群聊 | 设置群名，生成群聊ID |
+| 加群申请 | 通过群聊ID申请，群主审核 |
+| 群成员 | 显示成员头像、用户名、用户ID |
+| 群名修改 | 群主/管理员可修改 |
+
+### 4.5 AI 助手
+
+| 功能 | 说明 |
+|------|------|
+| 调用方式 | 按键调用 / @AI 召唤 |
+| 回复规范 | 单条≤50字，分条发送 |
+| 个性化设置 | 昵称、语气、响应优先级 |
+| 多厂商兼容 | 配置 API 地址和密钥即可切换 |
+
+---
+
+## 五、消息类型定义
+
+后端 `ChatService.h` 中定义的消息类型枚举：
+
+```cpp
+enum class MessageType {
+    // 用户相关
+    LOGIN = 1,              // 登录
+    REGISTER = 2,           // 注册
+    LOGOUT = 3,             // 登出
+
+    // 验证码
+    GET_CAPTCHA = 10,       // 获取验证码
+
+    // 好友
+    FRIEND_ADD = 20,        // 添加好友
+    FRIEND_AGREE = 21,      // 同意好友
+    FRIEND_REJECT = 22,     // 拒绝好友
+    FRIEND_LIST = 23,       // 好友列表
+    FRIEND_DELETE = 24,     // 删除好友
+
+    // 群聊
+    GROUP_CREATE = 30,      // 创建群聊
+    GROUP_JOIN = 31,        // 加群申请
+    GROUP_AGREE = 32,       // 同意加群
+    GROUP_REJECT = 33,      // 拒绝加群
+    GROUP_MESSAGE = 34,     // 群聊消息
+    GROUP_MEMBERS = 35,     // 群成员列表
+    GROUP_LIST = 36,        // 群列表
+
+    // 聊天
+    CHAT_PRIVATE = 40,      // 私聊消息
+    CHAT_HISTORY = 41,      // 聊天记录
+
+    // AI
+    AI_REQUEST = 50,        // AI 请求
+    AI_AT = 51,             // AI @召唤
+    AI_SETTING = 52,        // AI 设置
+
+    // 响应
+    RESPONSE_OK = 100,      // 成功响应
+    RESPONSE_ERROR = 101    // 错误响应
+};
+```
+
+---
+
+## 六、配置文件说明
+
+`config.ini` 位于项目根目录：
+
+```ini
+[database]
+host = 127.0.0.1       # 数据库地址
+port = 3306            # 数据库端口
+user = root            # 数据库用户
+password = 123456      # 数据库密码
+dbname = ai_chat_system # 数据库名
+
+[ai]
+api_url = https://...   # AI API 地址
+api_key = xxx           # AI API 密钥
+model = mimo-v2.5-pro   # 模型名称
+default_nickname = AI助手
+default_tone = 0        # 默认语气
+default_priority = 0    # 默认优先级
+
+[server]
+port = 8080             # 服务器端口
+thread_pool_size = 4    # 线程池大小
+avatar_storage_path = ./backend/static/avatars
+
+[redis]
+host = 127.0.0.1       # Redis 地址
+port = 6379            # Redis 端口
+```
+
+---
+
+## 七、如何启动
+
+### 7.1 环境要求
+
+| 依赖 | 版本 | 说明 |
+|------|------|------|
+| g++ | 支持 C++11 | 后端编译 |
+| MySQL | 5.7+ | 主数据库 |
+| Redis | 6.0+ | 缓存 |
+| Node.js | 18+ | 前端运行 |
+| libcurl | - | HTTP 请求 |
+| libmysqlclient | - | MySQL 客户端 |
+| libhiredis | - | Redis 客户端 |
+| OpenSSL | - | MD5 加密 |
+
+Ubuntu/Debian 安装依赖：
+
+```bash
+sudo apt update
+sudo apt install g++ make libmysqlclient-dev libcurl4-openssl-dev libhiredis-dev libssl-dev redis-server
+```
+
+### 7.2 初始化数据库
+
+```bash
+# 启动 MySQL 服务
+sudo systemctl start mysql
+
+# 创建数据库并执行初始化脚本
+mysql -u root -p < db/mysql/init.sql
+```
+
+### 7.3 启动 Redis
+
+```bash
+sudo systemctl start redis
+```
+
+### 7.4 编译并启动后端
+
+```bash
+# 编译
+make
+
+# 启动（默认监听 8080 端口）
+./ai_chat_server
+```
+
+启动成功会输出：
+```
+Starting AI Chat Server on 127.0.0.1:8080...
+Server started successfully!
+Waiting for connections...
+```
+
+### 7.5 启动 WebSocket 代理
+
+```bash
+# 安装代理依赖
+npm install
+
+# 启动代理（监听 8081，转发到 8080）
+node proxy-server.js
+```
+
+启动成功会输出：
+```
+WebSocket proxy server running on ws://localhost:8081
+Forwarding to 127.0.0.1:8080
+```
+
+### 7.6 启动前端
+
+```bash
+cd frontend
+
+# 安装依赖
+npm install
+
+# 启动开发服务器
+npm run dev
+```
+
+启动成功会输出：
+```
+VITE v8.x.x  ready in xxx ms
+
+➜  Local:   http://localhost:5173/
+```
+
+### 7.7 访问应用
+
+在浏览器打开 `http://localhost:5173/`，进入登录/注册页面。
+
+局域网内其他设备可通过 `http://<你的IP>:5173/` 访问。
+
+---
+
+## 八、快速启动脚本
+
+可以创建一个启动脚本 `start.sh`：
+
+```bash
+#!/bin/bash
+
+echo "========== 启动 AI 智能聊天互动系统 =========="
+
+# 1. 检查并启动 MySQL
+echo "1. 检查 MySQL..."
+if ! systemctl is-active --quiet mysql; then
+    sudo systemctl start mysql
+fi
+echo "   MySQL 已运行"
+
+# 2. 检查并启动 Redis
+echo "2. 检查 Redis..."
+if ! systemctl is-active --quiet redis; then
+    sudo systemctl start redis
+fi
+echo "   Redis 已运行"
+
+# 3. 编译后端（如果需要）
+echo "3. 检查后端..."
+if [ ! -f "./ai_chat_server" ]; then
+    echo "   编译后端..."
+    make
+fi
+echo "   后端已就绪"
+
+# 4. 启动后端
+echo "4. 启动后端服务器..."
+./ai_chat_server &
+BACKEND_PID=$!
+sleep 1
+
+# 5. 启动代理
+echo "5. 启动 WebSocket 代理..."
+node proxy-server.js &
+PROXY_PID=$!
+sleep 1
+
+# 6. 启动前端
+echo "6. 启动前端..."
+cd frontend
+npm run dev &
+FRONTEND_PID=$!
+
+echo ""
+echo "========== 系统已启动 =========="
+echo "后端:  http://localhost:8080"
+echo "代理:  ws://localhost:8081"
+echo "前端:  http://localhost:5173"
+echo ""
+echo "按 Ctrl+C 停止所有服务"
+
+# 等待中断
+trap "kill $BACKEND_PID $PROXY_PID $FRONTEND_PID 2>/dev/null; exit" INT TERM
+wait
+```
+
+---
+
+## 九、数据库表结构
+
+### 核心表
+
+| 表名 | 说明 | 核心字段 |
+|------|------|----------|
+| `user` | 用户表 | id, user_id, username, password, nickname, phone, avatar_path |
+| `group_chat` | 群聊表 | id, group_id, group_name, creator_id, avatar_path |
+| `chat_record` | 聊天记录 | id, sender_id, receiver_id, group_id, content, send_time, is_ai |
+| `friend_request` | 好友请求 | id, from_user_id, to_user_id, request_msg, status, cooling_time |
+| `verification_code` | 验证码 | id, phone, code, expire_time, is_used |
+
+---
+
+## 十、Redis 缓存设计
+
+| Key 格式 | 说明 |
+|----------|------|
+| `user:user_id:<id>` | 用户信息缓存 |
+| `ai:hot_question:<md5>` | AI 高频回复缓存 |
+| `chat:pair:<a>:<b>` | 私聊最近消息 |
+| `chat:group:<id>` | 群聊最近消息 |
+
+---
+
+## 十一、常见问题
+
+### Q: 编译报错找不到头文件
+A: 检查是否安装了 `libmysqlclient-dev`、`libcurl4-openssl-dev`、`libhiredis-dev`
+
+### Q: 连接数据库失败
+A: 检查 `config.ini` 中的数据库配置，确保 MySQL 服务已启动，密码正确
+
+### Q: 前端无法连接后端
+A: 确保 `proxy-server.js` 已启动（端口 8081），后端已启动（端口 8080）
+
+### Q: 验证码不显示
+A: 当前使用本地 SVG 生成验证码，无需后端支持
+
+---
+
+## 十二、相关文档
+
+- [产品需求文档 (PRD.md)](./PRD.md)
+- [架构设计文档 (ARCHITECTURE.md)](./ARCHITECTURE.md)
+- [前端设计方案 (FRONTEND_DESIGN.md)](./FRONTEND_DESIGN.md)

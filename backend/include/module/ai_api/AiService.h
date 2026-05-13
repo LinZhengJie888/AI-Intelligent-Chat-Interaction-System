@@ -49,6 +49,7 @@ struct AIRequest {
     std::string target_id;      ///< 目标ID（用户ID或群聊ID）
     std::string question;       ///< 问题内容
     bool is_group;              ///< 是否是群聊
+    std::string extra;          ///< 额外数据（包含chatKey等）
     std::string timestamp;      ///< 时间戳
 };
 
@@ -109,10 +110,12 @@ public:
      * @param target_id 目标ID（用户ID或群聊ID）
      * @param question 问题内容
      * @param is_group 是否是群聊
+     * @param extra 额外数据（包含chatKey等）
      * @return 请求ID
      */
     std::string processRequest(const std::string& user_id, const std::string& target_id, 
-                              const std::string& question, bool is_group);
+                               const std::string& question, bool is_group,
+                               const std::string& extra = "");
     
     /**
      * @brief 同步调用AI API
@@ -146,26 +149,27 @@ public:
     const AIServiceConfig& getConfig() const;
     
     /**
-     * @brief 更新用户AI设置
-     * @param user_id 用户ID
+     * @brief 更新聊天AI设置
+     * @param chat_key 聊天标识（single:{userId} / group:{groupId} / ai:ai）
      * @param nickname AI昵称
      * @param tone AI语气
      * @param priority AI优先级
+     * @param updated_by 修改者用户ID
      * @return 更新成功返回true，失败返回false
      */
-    bool updateUserAISettings(const std::string& user_id, const std::string& nickname, 
-                             int tone, int priority);
+    bool updateChatAISettings(const std::string& chat_key, const std::string& nickname, 
+                              int tone, int priority, const std::string& updated_by);
     
     /**
-     * @brief 获取用户AI设置
-     * @param user_id 用户ID
+     * @brief 获取聊天AI设置
+     * @param chat_key 聊天标识（single:{userId} / group:{groupId} / ai:ai）
      * @param nickname 输出的AI昵称
      * @param tone 输出的AI语气
      * @param priority 输出的AI优先级
      * @return 获取成功返回true，失败返回false
      */
-    bool getUserAISettings(const std::string& user_id, std::string& nickname, 
-                          int& tone, int& priority);
+    bool getChatAISettings(const std::string& chat_key, std::string& nickname, 
+                           int& tone, int& priority);
     
     /**
      * @brief 清理过期缓存

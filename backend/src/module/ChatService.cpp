@@ -325,6 +325,39 @@ void ChatService::handleMessage(spConnection conn, std::string& message) {
         case MessageType::AI_SETTING:
             handleAiSetting(conn, msg);
             break;
+        case MessageType::UPDATE_USERNAME:
+            handleUpdateUsername(conn, msg);
+            break;
+        case MessageType::MESSAGE_RECALL:
+            handleMessageRecall(conn, msg);
+            break;
+        case MessageType::MESSAGE_READ:
+            handleMessageRead(conn, msg);
+            break;
+        case MessageType::FRIEND_REQUEST_LIST:
+            handleFriendRequestList(conn, msg);
+            break;
+        case MessageType::FRIEND_SET_REMARK:
+            handleFriendSetRemark(conn, msg);
+            break;
+        case MessageType::GROUP_REQUEST_LIST:
+            handleGroupRequestList(conn, msg);
+            break;
+        case MessageType::GROUP_MODIFY_NAME:
+            handleGroupModifyName(conn, msg);
+            break;
+        case MessageType::GROUP_LEAVE:
+            handleGroupLeave(conn, msg);
+            break;
+        case MessageType::GROUP_KICK:
+            handleGroupKick(conn, msg);
+            break;
+        case MessageType::UPLOAD_AVATAR:
+            handleUploadAvatar(conn, msg);
+            break;
+        case MessageType::UPLOAD_GROUP_AVATAR:
+            handleUploadGroupAvatar(conn, msg);
+            break;
         default:
             sendResponse(conn, msg.type, -1, "Unknown message type");
             break;
@@ -416,17 +449,19 @@ void ChatService::handleLogin(spConnection conn, const Message& msg) {
     std::string captcha = getJsonValue(msg.extra, "captcha");
     std::string captcha_token = getJsonValue(msg.extra, "captcha_token");
     
-    if (user_id.empty() || password.empty() || captcha.empty()) {
+    if (user_id.empty() || password.empty()) {
         sendResponse(conn, static_cast<int>(MessageType::LOGIN), -1, 
                     "Missing required fields");
         return;
     }
     
-    // 验证验证码
-    if (!verify_service_->verifyCaptcha(captcha_token, captcha)) {
-        sendResponse(conn, static_cast<int>(MessageType::LOGIN), -1, 
-                    "Invalid captcha");
-        return;
+    // 验证验证码（仅在提供验证码时验证，演示模式可跳过）
+    if (!captcha.empty()) {
+        if (!verify_service_->verifyCaptcha(captcha_token, captcha)) {
+            sendResponse(conn, static_cast<int>(MessageType::LOGIN), -1, 
+                        "Invalid captcha");
+            return;
+        }
     }
     
     // 验证密码
@@ -816,7 +851,7 @@ void ChatService::handleGroupMessage(spConnection conn, const Message& msg) {
         }
         
         // 异步处理AI请求
-        ai_service_->processRequest(user_id, group_id, question, true);
+        ai_service_->processRequest(user_id, group_id, question, true, msg.extra);
         
         sendResponse(conn, static_cast<int>(MessageType::GROUP_MESSAGE), 0, 
                     "Message sent");
@@ -881,7 +916,7 @@ void ChatService::handlePrivateChat(spConnection conn, const Message& msg) {
             question = question.substr(start);
         }
         
-        ai_service_->processRequest(from_user_id, to_user_id, question, false);
+        ai_service_->processRequest(from_user_id, to_user_id, question, false, msg.extra);
         
         sendResponse(conn, static_cast<int>(MessageType::CHAT_PRIVATE), 0, 
                     "Message sent");
@@ -994,7 +1029,15 @@ void ChatService::handleAiRequest(spConnection conn, const Message& msg) {
         target_id = user_id;
     }
     
-    ai_service_->processRequest(user_id, target_id, question, is_group);
+    // 创建AI请求并设置extra
+    AIRequest ai_request;
+    ai_request.user_id = user_id;
+    ai_request.target_id = target_id;
+    ai_request.question = question;
+    ai_request.is_group = is_group;
+    ai_request.extra = msg.extra;  // 传递extra，包含chatKey
+    
+    ai_service_->processRequest(user_id, target_id, question, is_group, msg.extra);
     
     sendResponse(conn, static_cast<int>(MessageType::AI_REQUEST), 0, 
                 "AI request received");
@@ -1009,48 +1052,424 @@ void ChatService::handleAiAt(spConnection conn, const Message& msg) {
     std::string question = msg.content;
     bool is_group = (getJsonValue(msg.extra, "is_group") == "true");
     
-    ai_service_->processRequest(user_id, target_id, question, is_group);
+    // 创建AI请求并设置extra
+    AIRequest ai_request;
+    ai_request.user_id = user_id;
+    ai_request.target_id = target_id;
+    ai_request.question = question;
+    ai_request.is_group = is_group;
+    ai_request.extra = msg.extra;  // 传递extra，包含chatKey
+    
+    ai_service_->processRequest(user_id, target_id, question, is_group, msg.extra);
     
     sendResponse(conn, static_cast<int>(MessageType::AI_AT), 0, 
                 "AI request received");
 }
 
 /**
- * @brief 处理AI设置修改请求
+ * @brief 处理AI设置修改请求（聊天级别）
  */
 void ChatService::handleAiSetting(spConnection conn, const Message& msg) {
     std::string user_id = msg.from_user_id;
-    std::string ai_nickname = getJsonValue(msg.extra, "ai_nickname");
-    std::string ai_tone_str = getJsonValue(msg.extra, "ai_tone");
-    std::string ai_priority_str = getJsonValue(msg.extra, "ai_priority");
+    std::string chat_key = getJsonValue(msg.extra, "chatKey");
+    std::string nickname = getJsonValue(msg.extra, "nickname");
+    std::string tone_str = getJsonValue(msg.extra, "tone");
+    std::string priority_str = getJsonValue(msg.extra, "priority");
     
-    UserDAO user_dao(*db_);
-    User* user = user_dao.findByUserId(user_id);
-    if (!user) {
+    if (chat_key.empty()) {
         sendResponse(conn, static_cast<int>(MessageType::AI_SETTING), -1, 
-                    "User not found");
+                    "Missing chat_key");
         return;
     }
     
-    if (!ai_nickname.empty()) {
-        user->ai_nickname = ai_nickname;
-    }
-    if (!ai_tone_str.empty()) {
-        user->ai_tone = std::stoi(ai_tone_str);
-    }
-    if (!ai_priority_str.empty()) {
-        user->ai_priority = std::stoi(ai_priority_str);
-    }
+    int tone = tone_str.empty() ? 0 : std::stoi(tone_str);
+    int priority = priority_str.empty() ? 1 : std::stoi(priority_str);
     
-    if (user_dao.update(*user)) {
+    if (ai_service_->updateChatAISettings(chat_key, nickname, tone, priority, user_id)) {
+        // 广播给聊天中的所有成员
+        std::string notification = buildResponse(
+            static_cast<int>(MessageType::AI_SETTING), 0, 
+            "AI settings updated",
+            "{\"chat_key\":\"" + chat_key + "\",\"nickname\":\"" + escapeJson(nickname) + 
+            "\",\"tone\":" + tone_str + ",\"priority\":" + priority_str + "}");
+        
+        // 根据chat_key类型广播
+        if (chat_key.find("group:") == 0) {
+            std::string group_id = chat_key.substr(6);
+            broadcastToGroup(group_id, notification);
+        } else if (chat_key.find("single:") == 0) {
+            std::string target_user_id = chat_key.substr(7);
+            broadcastToUser(user_id, notification);
+            broadcastToUser(target_user_id, notification);
+        } else {
+            broadcastToUser(user_id, notification);
+        }
+        
         sendResponse(conn, static_cast<int>(MessageType::AI_SETTING), 0, 
                     "AI settings updated");
     } else {
         sendResponse(conn, static_cast<int>(MessageType::AI_SETTING), -1, 
                     "Failed to update AI settings");
     }
+}
+
+/**
+ * @brief 处理修改用户名请求
+ */
+void ChatService::handleUpdateUsername(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string new_username = getJsonValue(msg.extra, "username");
+    
+    if (new_username.empty()) {
+        sendResponse(conn, static_cast<int>(MessageType::UPDATE_USERNAME), -1, 
+                    "Missing username");
+        return;
+    }
+    
+    UserDAO user_dao(*db_);
+    User* user = user_dao.findByUserId(user_id);
+    if (!user) {
+        sendResponse(conn, static_cast<int>(MessageType::UPDATE_USERNAME), -1, 
+                    "User not found");
+        return;
+    }
+    
+    user->username = new_username;
+    if (user_dao.update(*user)) {
+        sendResponse(conn, static_cast<int>(MessageType::UPDATE_USERNAME), 0, 
+                    "Username updated",
+                    "{\"username\":\"" + escapeJson(new_username) + "\"}");
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::UPDATE_USERNAME), -1, 
+                    "Failed to update username");
+    }
     
     delete user;
+}
+
+/**
+ * @brief 处理消息撤回请求
+ */
+void ChatService::handleMessageRecall(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string message_id_str = getJsonValue(msg.extra, "message_id");
+    
+    if (message_id_str.empty()) {
+        sendResponse(conn, static_cast<int>(MessageType::MESSAGE_RECALL), -1, 
+                    "Missing message_id");
+        return;
+    }
+    
+    uint64_t message_id = strtoull(message_id_str.c_str(), nullptr, 10);
+    ChatRecordDAO record_dao(*db_);
+    UserDAO user_dao(*db_);
+    
+    // 检查消息是否属于当前用户
+    ChatRecord* record = record_dao.findById(message_id);
+    if (!record) {
+        sendResponse(conn, static_cast<int>(MessageType::MESSAGE_RECALL), -1, 
+                    "Message not found");
+        return;
+    }
+    
+    uint64_t user_id_num = getUserIdNum(*db_, user_id);
+    if (record->sender_id != user_id_num) {
+        delete record;
+        sendResponse(conn, static_cast<int>(MessageType::MESSAGE_RECALL), -1, 
+                    "Cannot recall others message");
+        return;
+    }
+    
+    // 保存receiver_id用于通知
+    uint64_t receiver_id = record->receiver_id;
+    delete record;
+    
+    if (record_dao.recall(message_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::MESSAGE_RECALL), 0, 
+                    "Message recalled");
+        
+        // 通知对方消息已撤回
+        std::string notification = buildResponse(
+            static_cast<int>(MessageType::MESSAGE_RECALL), 0, 
+            "Message recalled",
+            "{\"message_id\":" + message_id_str + "}");
+        
+        // 如果是私聊，通知对方
+        if (receiver_id > 0) {
+            User* receiver = user_dao.findById(receiver_id);
+            if (receiver) {
+                broadcastToUser(receiver->user_id, notification);
+                delete receiver;
+            }
+        }
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::MESSAGE_RECALL), -1, 
+                    "Failed to recall message");
+    }
+}
+
+/**
+ * @brief 处理消息已读请求
+ */
+void ChatService::handleMessageRead(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string message_id_str = getJsonValue(msg.extra, "message_id");
+    
+    if (message_id_str.empty()) {
+        sendResponse(conn, static_cast<int>(MessageType::MESSAGE_READ), -1, 
+                    "Missing message_id");
+        return;
+    }
+    
+    uint64_t message_id = strtoull(message_id_str.c_str(), nullptr, 10);
+    ChatRecordDAO record_dao(*db_);
+    
+    if (record_dao.markAsRead(message_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::MESSAGE_READ), 0, 
+                    "Message marked as read");
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::MESSAGE_READ), -1, 
+                    "Failed to mark message as read");
+    }
+}
+
+/**
+ * @brief 处理获取好友请求列表请求
+ */
+void ChatService::handleFriendRequestList(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    
+    std::string requests_json = friend_service_->getPendingRequests(user_id);
+    
+    sendResponse(conn, static_cast<int>(MessageType::FRIEND_REQUEST_LIST), 0, 
+                "Success", requests_json);
+}
+
+/**
+ * @brief 处理设置好友备注请求
+ */
+void ChatService::handleFriendSetRemark(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string friend_id = msg.to_user_id;
+    std::string remark = getJsonValue(msg.extra, "remark");
+    
+    if (friend_id.empty()) {
+        sendResponse(conn, static_cast<int>(MessageType::FRIEND_SET_REMARK), -1, 
+                    "Missing friend_id");
+        return;
+    }
+    
+    if (friend_service_->setRemark(user_id, friend_id, remark)) {
+        sendResponse(conn, static_cast<int>(MessageType::FRIEND_SET_REMARK), 0, 
+                    "Remark set successfully");
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::FRIEND_SET_REMARK), -1, 
+                    "Failed to set remark");
+    }
+}
+
+/**
+ * @brief 处理获取加群请求列表请求
+ */
+void ChatService::handleGroupRequestList(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string group_id = msg.to_user_id;
+    
+    // 检查是否是群主
+    if (!group_service_->isGroupCreator(group_id, user_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_REQUEST_LIST), -1, 
+                    "Not group creator");
+        return;
+    }
+    
+    std::string requests_json = group_service_->getPendingRequests(group_id);
+    
+    sendResponse(conn, static_cast<int>(MessageType::GROUP_REQUEST_LIST), 0, 
+                "Success", requests_json);
+}
+
+/**
+ * @brief 处理修改群名请求
+ */
+void ChatService::handleGroupModifyName(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string group_id = msg.to_user_id;
+    std::string new_name = getJsonValue(msg.extra, "group_name");
+    
+    if (new_name.empty()) {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_MODIFY_NAME), -1, 
+                    "Missing group_name");
+        return;
+    }
+    
+    // 检查是否是群主或管理员
+    if (!group_service_->isGroupCreator(group_id, user_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_MODIFY_NAME), -1, 
+                    "Not group creator");
+        return;
+    }
+    
+    if (group_service_->modifyGroupName(group_id, new_name, user_id)) {
+        // 广播群名修改通知
+        std::string notification = buildResponse(
+            static_cast<int>(MessageType::GROUP_MODIFY_NAME), 0, 
+            "Group name changed",
+            "{\"group_id\":\"" + group_id + "\",\"group_name\":\"" + escapeJson(new_name) + "\"}");
+        broadcastToGroup(group_id, notification);
+        
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_MODIFY_NAME), 0, 
+                    "Group name modified");
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_MODIFY_NAME), -1, 
+                    "Failed to modify group name");
+    }
+}
+
+/**
+ * @brief 处理退出群聊请求
+ */
+void ChatService::handleGroupLeave(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string group_id = msg.to_user_id;
+    
+    // 群主不能退出群聊
+    if (group_service_->isGroupCreator(group_id, user_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_LEAVE), -1, 
+                    "Creator cannot leave group");
+        return;
+    }
+    
+    if (group_service_->leaveGroup(user_id, group_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_LEAVE), 0, 
+                    "Left group successfully");
+        
+        // 通知群成员
+        std::string notification = buildResponse(
+            static_cast<int>(MessageType::GROUP_LEAVE), 0, 
+            "Member left group",
+            "{\"user_id\":\"" + user_id + "\",\"group_id\":\"" + group_id + "\"}");
+        broadcastToGroup(group_id, notification);
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_LEAVE), -1, 
+                    "Failed to leave group");
+    }
+}
+
+/**
+ * @brief 处理踢出群成员请求
+ */
+void ChatService::handleGroupKick(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;  // 操作者
+    std::string target_id = msg.to_user_id;  // 被踢者
+    std::string group_id = getJsonValue(msg.extra, "group_id");
+    
+    // 检查是否是群主
+    if (!group_service_->isGroupCreator(group_id, user_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_KICK), -1, 
+                    "Not group creator");
+        return;
+    }
+    
+    // 不能踢自己
+    if (user_id == target_id) {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_KICK), -1, 
+                    "Cannot kick yourself");
+        return;
+    }
+    
+    if (group_service_->kickMember(target_id, group_id, user_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_KICK), 0, 
+                    "Member kicked");
+        
+        // 通知群成员
+        std::string notification = buildResponse(
+            static_cast<int>(MessageType::GROUP_KICK), 0, 
+            "Member kicked from group",
+            "{\"user_id\":\"" + target_id + "\",\"group_id\":\"" + group_id + "\"}");
+        broadcastToGroup(group_id, notification);
+        
+        // 通知被踢者
+        std::string kick_notification = buildResponse(
+            static_cast<int>(MessageType::GROUP_KICK), 0, 
+            "You have been kicked from group",
+            "{\"group_id\":\"" + group_id + "\"}");
+        broadcastToUser(target_id, kick_notification);
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_KICK), -1, 
+                    "Failed to kick member");
+    }
+}
+
+/**
+ * @brief 处理上传用户头像请求（简化实现）
+ */
+void ChatService::handleUploadAvatar(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string avatar_data = getJsonValue(msg.extra, "avatar_data");  // Base64编码的图片数据
+    std::string format = getJsonValue(msg.extra, "format");  // jpg/png
+    
+    if (avatar_data.empty()) {
+        sendResponse(conn, static_cast<int>(MessageType::UPLOAD_AVATAR), -1, 
+                    "Missing avatar data");
+        return;
+    }
+    
+    // 生成文件名
+    std::string filename = "avatar_" + user_id + "." + (format.empty() ? "png" : format);
+    std::string filepath = "./backend/static/avatars/" + filename;
+    
+    // 简化实现：直接存储Base64数据（实际项目应解码后存储）
+    // 这里仅更新数据库路径
+    UserDAO user_dao(*db_);
+    User* user = user_dao.findByUserId(user_id);
+    if (!user) {
+        sendResponse(conn, static_cast<int>(MessageType::UPLOAD_AVATAR), -1, 
+                    "User not found");
+        return;
+    }
+    
+    user->avatar_path = "/static/avatars/" + filename;
+    if (user_dao.update(*user)) {
+        sendResponse(conn, static_cast<int>(MessageType::UPLOAD_AVATAR), 0, 
+                    "Avatar uploaded",
+                    "{\"avatar_path\":\"" + user->avatar_path + "\"}");
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::UPLOAD_AVATAR), -1, 
+                    "Failed to upload avatar");
+    }
+    
+    delete user;
+}
+
+/**
+ * @brief 处理上传群聊头像请求（简化实现）
+ */
+void ChatService::handleUploadGroupAvatar(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string group_id = msg.to_user_id;
+    std::string avatar_data = getJsonValue(msg.extra, "avatar_data");
+    std::string format = getJsonValue(msg.extra, "format");
+    
+    // 检查是否是群主
+    if (!group_service_->isGroupCreator(group_id, user_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::UPLOAD_GROUP_AVATAR), -1, 
+                    "Not group creator");
+        return;
+    }
+    
+    // 生成文件名
+    std::string filename = "group_" + group_id + "." + (format.empty() ? "png" : format);
+    std::string filepath = "./backend/static/avatars/" + filename;
+    
+    // 简化实现：直接更新数据库路径
+    if (group_service_->modifyGroupAvatar(group_id, "/static/avatars/" + filename, user_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::UPLOAD_GROUP_AVATAR), 0, 
+                    "Group avatar uploaded",
+                    "{\"avatar_path\":\"/static/avatars/" + filename + "\"}");
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::UPLOAD_GROUP_AVATAR), -1, 
+                    "Failed to upload group avatar");
+    }
 }
 
 /**

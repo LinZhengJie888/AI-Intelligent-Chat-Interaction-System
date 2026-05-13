@@ -20,33 +20,16 @@ const filteredGroups = computed(() => {
 
 function submitCreateGroup() {
   if (!newGroupName.value.trim()) return
-  const newId = 'group_' + Date.now()
-  store.groups.push({
-    groupId: newId,
-    groupName: newGroupName.value.trim(),
-    memberCount: 1,
-    preview: '群聊已创建',
-    colors: ['#07C160', '#576B95', '#FA5151', '#FF8800']
-  })
-  store.upsertRecent('group', newId, newGroupName.value.trim(), '群聊已创建')
+  // 通过WebSocket创建群聊
+  store.createGroup(newGroupName.value.trim())
   showCreateGroup.value = false
   newGroupName.value = ''
 }
 
 function submitJoinGroup() {
   if (!joinGroupId.value.trim()) return
-  const groupId = joinGroupId.value.trim()
-  const existing = store.groups.find(g => g.groupId === groupId)
-  if (!existing) {
-    store.groups.push({
-      groupId: groupId,
-      groupName: '群聊 ' + groupId,
-      memberCount: 1,
-      preview: '你已加入群聊',
-      colors: ['#07C160', '#576B95', '#FA5151', '#FF8800']
-    })
-    store.upsertRecent('group', groupId, '群聊 ' + groupId, '你已加入群聊')
-  }
+  // 通过WebSocket加入群聊
+  store.joinGroup(joinGroupId.value.trim(), joinGroupMsg.value || '申请加入群聊')
   showJoinGroup.value = false
   joinGroupId.value = ''
   joinGroupMsg.value = ''

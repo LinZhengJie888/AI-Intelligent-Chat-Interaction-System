@@ -133,14 +133,17 @@ function validateRegister() {
 
 function handleLogin() {
   if (!validateLogin()) return
-  store.login(loginForm.userId, loginForm.userId)
+  // 通过WebSocket发送登录请求
+  store.login(loginForm.userId, loginForm.password)
 }
 
 function handleRegister() {
   if (!validateRegister()) return
+  // 通过WebSocket发送注册请求
+  store.register(regForm.userId, regForm.username, regForm.password, regForm.phone)
   // 注册成功后切到登录
   activeTab.value = 'login'
-  errors.general = '注册成功，请登录'
+  errors.general = '注册请求已发送，请等待响应'
   regForm.username = ''
   regForm.userId = ''
   regForm.password = ''

@@ -157,6 +157,23 @@ CREATE TABLE `verification_code` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='验证码表';
 
 -- ============================================
+-- 9. 聊天AI设置表 (chat_ai_settings)
+-- ============================================
+DROP TABLE IF EXISTS `chat_ai_settings`;
+CREATE TABLE `chat_ai_settings` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+    `chat_key` VARCHAR(64) NOT NULL COMMENT '聊天标识：single:{userId} / group:{groupId} / ai:ai',
+    `nickname` VARCHAR(32) DEFAULT 'AI助手' COMMENT 'AI昵称',
+    `tone` TINYINT DEFAULT 0 COMMENT '语气：0-默认，1-活泼，2-严谨，3-幽默',
+    `priority` TINYINT DEFAULT 1 COMMENT '优先级：0-速度优先，1-均衡，2-质量优先',
+    `updated_by` VARCHAR(64) DEFAULT NULL COMMENT '最后修改者用户ID',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_chat_key` (`chat_key`),
+    KEY `idx_updated_by` (`updated_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='聊天AI设置表';
+
+-- ============================================
 -- 初始化完成提示
 -- ============================================
 SELECT '数据库初始化完成！' AS message;

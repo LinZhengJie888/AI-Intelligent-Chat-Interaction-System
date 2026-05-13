@@ -47,9 +47,22 @@ wss.on('connection', (ws) => {
     ws.close();
   });
   
-  ws.on('message', (message) => {
+  ws.on('message', (message, isBinary) => {
+    // 处理Buffer或ArrayBuffer格式的消息
+    let buffer;
     if (Buffer.isBuffer(message)) {
-      tcpClient.write(message);
+      buffer = message;
+    } else if (message instanceof ArrayBuffer) {
+      buffer = Buffer.from(message);
+    } else if (Array.isArray(message)) {
+      buffer = Buffer.concat(message);
+    } else {
+      // 尝试转换为Buffer
+      buffer = Buffer.from(message);
+    }
+    
+    if (buffer.length > 0) {
+      tcpClient.write(buffer);
     }
   });
   

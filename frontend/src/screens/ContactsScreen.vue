@@ -35,13 +35,8 @@ function openAddFriend() {
 
 function submitAddFriend() {
   if (!addFriendId.value.trim()) return
-  store.addFriendRequest({
-    fromUserId: addFriendId.value,
-    fromUsername: addFriendId.value,
-    requestMsg: addFriendMsg.value || '请求添加好友',
-    color: '#576B95',
-    timestamp: Date.now()
-  })
+  // 通过WebSocket发送好友请求
+  store.addFriend(addFriendId.value, addFriendMsg.value || '请求添加好友')
   showAddFriend.value = false
   addFriendId.value = ''
   addFriendMsg.value = ''

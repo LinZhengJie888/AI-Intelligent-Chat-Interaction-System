@@ -41,6 +41,8 @@ enum class MessageType {
     FRIEND_REJECT = 22,     ///< 拒绝好友请求
     FRIEND_LIST = 23,       ///< 获取好友列表
     FRIEND_DELETE = 24,     ///< 删除好友
+    FRIEND_REQUEST_LIST = 25, ///< 获取好友请求列表
+    FRIEND_SET_REMARK = 26, ///< 设置好友备注
     
     // 群聊相关
     GROUP_CREATE = 30,      ///< 创建群聊
@@ -50,15 +52,28 @@ enum class MessageType {
     GROUP_MESSAGE = 34,     ///< 群聊消息
     GROUP_MEMBERS = 35,     ///< 获取群成员列表
     GROUP_LIST = 36,        ///< 获取群列表
+    GROUP_MODIFY_NAME = 37, ///< 修改群名
+    GROUP_LEAVE = 39,       ///< 退出群聊
     
     // 聊天相关
     CHAT_PRIVATE = 40,      ///< 私聊消息
     CHAT_HISTORY = 41,      ///< 获取聊天记录
+    MESSAGE_RECALL = 42,    ///< 消息撤回
+    MESSAGE_READ = 43,      ///< 消息已读
     
     // AI相关
     AI_REQUEST = 50,        ///< AI请求（按键调用）
     AI_AT = 51,             ///< AI请求（@召唤）
     AI_SETTING = 52,        ///< AI设置修改
+    
+    // 用户信息修改
+    UPDATE_USERNAME = 62,   ///< 修改用户名
+    GROUP_KICK = 63,        ///< 踢出群成员
+    GROUP_REQUEST_LIST = 64, ///< 获取加群请求列表
+    
+    // 头像相关
+    UPLOAD_AVATAR = 70,     ///< 上传用户头像
+    UPLOAD_GROUP_AVATAR = 71, ///< 上传群聊头像
     
     // 响应
     RESPONSE_OK = 100,      ///< 成功响应
@@ -352,6 +367,83 @@ private:
      * @param msg 消息结构体
      */
     void handleAiSetting(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理修改用户名请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleUpdateUsername(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理消息撤回请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleMessageRecall(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理消息已读请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleMessageRead(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理获取好友请求列表请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleFriendRequestList(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理设置好友备注请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleFriendSetRemark(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理获取加群请求列表请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleGroupRequestList(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理修改群名请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleGroupModifyName(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理退出群聊请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleGroupLeave(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理踢出群成员请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleGroupKick(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理上传用户头像请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleUploadAvatar(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理上传群聊头像请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleUploadGroupAvatar(spConnection conn, const Message& msg);
 
     // 业务模块指针
     std::unique_ptr<VerifyService> verify_service_;

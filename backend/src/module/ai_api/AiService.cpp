@@ -10,6 +10,8 @@
 #include "module/redis/RedisClient.h"
 #include "model/ChatRecord.h"
 #include "model/ChatRecordDAO.h"
+#include "model/ChatAISetting.h"
+#include "model/ChatAISettingDAO.h"
 #include "common/Util.h"
 #include <iostream>
 #include <sstream>
@@ -230,7 +232,8 @@ bool AiService::init() {
  * @brief 处理AI请求
  */
 std::string AiService::processRequest(const std::string& user_id, const std::string& target_id, 
-                                       const std::string& question, bool is_group) {
+                                       const std::string& question, bool is_group,
+                                       const std::string& extra) {
     std::string request_id = generateRequestId();
     
     // 创建请求对象
@@ -240,6 +243,7 @@ std::string AiService::processRequest(const std::string& user_id, const std::str
     request.target_id = target_id;
     request.question = question;
     request.is_group = is_group;
+    request.extra = extra;
     request.timestamp = util::getCurrentTime();
     
     // 保存到待处理队列
@@ -309,7 +313,7 @@ bool AiService::callAIAPI(const std::string& question, AITone tone, AIPriority p
             break;
     }
     
-    std::string system_prompt = "你是一个智能助手。" + tone_prompt + priority_prompt + 
+    std::string system_prompt = "你是一个智能聊天助手。" + tone_prompt + priority_prompt + 
                                 "回答要简洁、精准，避免冗余。如果需要分点说明，请用数字编号。";
     
     // 构建JSON请求体
@@ -517,46 +521,41 @@ const AIServiceConfig& AiService::getConfig() const {
 }
 
 /**
- * @brief 更新用户AI设置
+ * @brief 更新聊天AI设置
  */
-bool AiService::updateUserAISettings(const std::string& user_id, const std::string& nickname, 
-                                      int tone, int priority) {
-    char sql[1024];
-    snprintf(sql, sizeof(sql),
-             "UPDATE user SET ai_nickname='%s', ai_tone=%d, ai_priority=%d "
-             "WHERE user_id='%s'",
-             nickname.c_str(), tone, priority, user_id.c_str());
+bool AiService::updateChatAISettings(const std::string& chat_key, const std::string& nickname, 
+                                      int tone, int priority, const std::string& updated_by) {
+    ChatAISettingDAO dao(db_);
+    ChatAISetting setting;
+    setting.chat_key = chat_key;
+    setting.nickname = nickname;
+    setting.tone = tone;
+    setting.priority = priority;
+    setting.updated_by = updated_by;
     
-    return db_.execute(sql);
+    return dao.insertOrUpdate(setting);
 }
 
 /**
- * @brief 获取用户AI设置
+ * @brief 获取聊天AI设置
  */
-bool AiService::getUserAISettings(const std::string& user_id, std::string& nickname, 
+bool AiService::getChatAISettings(const std::string& chat_key, std::string& nickname, 
                                    int& tone, int& priority) {
-    char sql[512];
-    snprintf(sql, sizeof(sql),
-             "SELECT ai_nickname, ai_tone, ai_priority FROM user WHERE user_id='%s'",
-             user_id.c_str());
+    ChatAISettingDAO dao(db_);
+    ChatAISetting setting;
     
-    MYSQL_RES* res = db_.query(sql);
-    if (!res) {
-        return false;
+    if (dao.findByChatKey(chat_key, setting)) {
+        nickname = setting.nickname;
+        tone = setting.tone;
+        priority = setting.priority;
+        return true;
     }
     
-    MYSQL_ROW row = mysql_fetch_row(res);
-    if (!row) {
-        db_.freeResult(res);
-        return false;
-    }
-    
-    nickname = row[0] ? row[0] : "AI助手";
-    tone = row[1] ? atoi(row[1]) : 0;
-    priority = row[2] ? atoi(row[2]) : 0;
-    
-    db_.freeResult(res);
-    return true;
+    // 返回默认值
+    nickname = "AI助手";
+    tone = 0;
+    priority = 1;
+    return false;
 }
 
 /**
@@ -819,16 +818,27 @@ void AiService::asyncProcessRequest(const AIRequest& request) {
     std::cout << "[AI] Processing request: " << request.request_id << std::endl;
     auto start_time = std::chrono::steady_clock::now();
     
-    // 获取用户AI设置
+    // 获取聊天AI设置（从请求的extra中解析chatKey）
+    std::string chat_key = getJsonValue(request.extra, "chatKey");
+    if (chat_key.empty()) {
+        // 根据目标ID生成chatKey
+        if (request.is_group) {
+            chat_key = "group:" + request.target_id;
+        } else {
+            chat_key = "single:" + request.target_id;
+        }
+    }
+    
     std::string ai_nickname;
     int tone = 0;
     int priority = 0;
-    if (!getUserAISettings(request.user_id, ai_nickname, tone, priority)) {
-        // 如果用户不存在，使用默认昵称
+    if (!getChatAISettings(chat_key, ai_nickname, tone, priority)) {
+        // 如果没有设置，使用默认值
         ai_nickname = "AI助手";
-        std::cout << "[AI] User not found, using default nickname: " << ai_nickname << std::endl;
+        std::cout << "[AI] Chat settings not found, using default nickname: " << ai_nickname << std::endl;
     } else {
-        std::cout << "[AI] User settings: nickname=" << ai_nickname << ", tone=" << tone << ", priority=" << priority << std::endl;
+        std::cout << "[AI] Chat settings: chat_key=" << chat_key << ", nickname=" << ai_nickname 
+                  << ", tone=" << tone << ", priority=" << priority << std::endl;
     }
     
     // 调用AI API

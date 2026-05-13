@@ -272,7 +272,7 @@ chat_tool/                  # 项目根目录
 
 轻量设计，仅保留核心字段，无复杂关联，按云服务器部署架构设计，适配本地/局域网验证演示及后续云服务器部署，新增好友请求、动态验证码相关表，便于C++后端开发与简历呈现：
 
-### 4.1 MySQL核心表设计（5张核心表）
+### 4.1 MySQL核心表设计（6张核心表）
 
 | 表名 | 核心字段 | 字段说明 |
 |------|----------|----------|
@@ -281,6 +281,7 @@ chat_tool/                  # 项目根目录
 | **chat_record（聊天记录表）** | id(主键)、sender_id、receiver_id、group_id、content、send_time、is_ai（标记是否为AI回复） | 存储好友/群聊消息，关联用户、群聊，标记AI回复便于区分，适配云服务器部署后的大量消息存储 |
 | **friend_request（好友请求表）** | id(主键)、from_user_id、to_user_id、request_msg、status（0-待处理，1-同意，2-拒绝）、create_time、cooling_time（冷却时间） | 存储好友添加请求信息（通过用户ID发起请求），记录请求状态、冷却时间，实现微信式同意/拒绝逻辑，关联请求方与接收方的用户ID |
 | **verification_code（验证码表）** | id(主键)、phone、code（字符组合）、expire_time、send_time、is_used（0-未使用，1-已使用） | 存储动态验证码信息，控制有效期、使用状态，对应图像展示的验证码，仅用于辅助密码登录，保障登录安全，与用户头像、群聊头像等个性化设置无关联 |
+| **chat_ai_settings（聊天AI设置表）** | id(主键)、chat_key（聊天标识，唯一）、nickname（AI昵称）、tone（语气）、priority（优先级）、updated_by（修改者）、update_time | 存储聊天级别的AI配置，与聊天绑定而非用户绑定。chat_key格式：single:{userId} / group:{groupId} / ai:ai。同一聊天中所有成员共享相同的AI设置，任何成员修改后所有人立即可见 |
 
 ---
 
@@ -301,6 +302,8 @@ chat_tool/                  # 项目根目录
 - **AI API配置缓存**：key=ai:config，value=当前接入厂商、API地址、密钥等配置，无需频繁读取配置文件，提升API调用速度
 
 - **头像路径缓存**：key=user:id:avatar，value=用户头像存储路径；key=group:id:avatar，value=群聊头像存储路径，减少数据库查询，提升头像展示速度
+
+- **聊天AI设置缓存**：key=ai:settings:{chatKey}，value=AI昵称、语气、优先级，减少数据库查询，提升AI响应速度
 
 ---
 

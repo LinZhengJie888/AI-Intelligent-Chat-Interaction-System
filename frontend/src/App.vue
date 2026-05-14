@@ -12,12 +12,19 @@ import AIChatScreen from './screens/AIChatScreen.vue'
 import ContactsScreen from './screens/ContactsScreen.vue'
 import GroupsScreen from './screens/GroupsScreen.vue'
 import ProfileScreen from './screens/ProfileScreen.vue'
+import AISettingsScreen from './screens/AISettingsScreen.vue'
 
 const showAIPet = computed(() => store.currentScreen !== 'login')
 </script>
 
 <template>
   <div class="app">
+    <!-- 连接状态提示 -->
+    <div v-if="store.isLoggedIn && !store.wsConnected" class="connection-banner">
+      <span v-if="store.wsConnecting">正在连接服务器...</span>
+      <span v-else>连接已断开，请检查后端是否启动</span>
+    </div>
+
     <Sidebar v-if="store.isLoggedIn" />
     <div class="main-panel">
       <LoginScreen v-if="store.currentScreen === 'login'" />
@@ -28,6 +35,7 @@ const showAIPet = computed(() => store.currentScreen !== 'login')
       <ContactsScreen v-if="store.currentScreen === 'contacts'" />
       <GroupsScreen v-if="store.currentScreen === 'groups'" />
       <ProfileScreen v-if="store.currentScreen === 'profile'" />
+      <AISettingsScreen v-if="store.currentScreen === 'ai-settings'" />
     </div>
     <BottomNav v-if="store.isLoggedIn" />
     <AIPet v-if="showAIPet" />
@@ -187,6 +195,13 @@ html{font-family:var(--font-body);color:var(--wx-text);background:var(--wx-bg);f
 ::-webkit-scrollbar{width:6px}
 ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:3px}
 ::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25)}
+
+.connection-banner{
+  position:fixed;top:0;left:0;right:0;z-index:999;
+  padding:8px 16px;text-align:center;font-size:13px;
+  background:#FFF3E0;color:#E65100;border-bottom:1px solid #FFE0B2;
+  animation:fadeIn .3s ease-out;
+}
 
 @media(max-width:768px){
   .msg-row{max-width:90%}

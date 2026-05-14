@@ -1,25 +1,69 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import store from '../store'
 
-const showEditProfile = ref(false)
+const showEdit = ref(false)
 const editUsername = ref('')
-const editNickname = ref('')
+const fileInput = ref(null)
 
-function openEditProfile() {
-  editUsername.value = store.currentUser.username
-  editNickname.value = store.currentUser.nickname || ''
-  showEditProfile.value = true
+function openEdit() {
+  editUsername.value = store.currentUser.username || ''
+  showEdit.value = true
+  store.clearMessages()
 }
 
 function saveProfile() {
-  if (editUsername.value.trim()) {
-    store.updateProfile({
-      username: editUsername.value.trim(),
-      nickname: editNickname.value.trim()
-    })
+  if (!editUsername.value.trim()) return
+  store.updateProfile({ username: editUsername.value.trim() })
+  showEdit.value = false
+}
+
+function triggerAvatarUpload() {
+  if (fileInput.value) fileInput.value.click()
+}
+
+function handleAvatarChange(e) {
+  const file = e.target.files[0]
+  if (!file) return
+
+  // 检查文件类型
+  if (!file.type.startsWith('image/')) {
+    store.errorMessage = '请选择图片文件'
+    return
   }
-  showEditProfile.value = false
+
+  // 检查文件大小（限制 5MB）
+  if (file.size > 5 * 1024 * 1024) {
+    store.errorMessage = '图片大小不能超过 5MB'
+    return
+  }
+
+  // 压缩图片后再上传
+  const reader = new FileReader()
+  reader.onload = (ev) => {
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      const size = 200 // 头像尺寸 200x200
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      
+      // 居中裁剪
+      const min = Math.min(img.width, img.height)
+      const sx = (img.width - min) / 2
+      const sy = (img.height - min) / 2
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size)
+      
+      const compressed = canvas.toDataURL('image/jpeg', 0.8)
+      store.uploadAvatar(compressed, 'jpg')
+      store.currentUser.avatarPath = compressed
+      localStorage.setItem('user-info', JSON.stringify(store.currentUser))
+    }
+    img.src = ev.target.result
+  }
+  reader.readAsDataURL(file)
+  e.target.value = ''
 }
 </script>
 
@@ -27,16 +71,23 @@ function saveProfile() {
   <div class="screen active">
     <div class="top-bar">
       <div class="top-bar-title">个人信息</div>
-      <button class="top-bar-action" @click="openEditProfile">
+      <button class="top-bar-action" @click="openEdit">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--wx-text-secondary)"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" /></svg>
       </button>
     </div>
+
+    <!-- 提示信息 -->
+    <div v-if="store.successMessage" class="toast-success">{{ store.successMessage }}</div>
+    <div v-if="store.errorMessage" class="toast-error">{{ store.errorMessage }}</div>
+
     <div class="profile-card">
       <div class="profile-header">
-        <div class="profile-avatar" :style="{ background: store.currentUser.avatarPath ? 'transparent' : 'var(--wx-green)' }">
-          <img v-if="store.currentUser.avatarPath" :src="store.currentUser.avatarPath" alt="avatar">
-          <span v-else>{{ (store.currentUser.username || store.currentUser.userId || '我')[0] }}</span>
+        <div class="profile-avatar-wrap" @click="triggerAvatarUpload">
+          <img v-if="store.currentUser.avatarPath" :src="store.currentUser.avatarPath" class="profile-avatar-img" />
+          <div v-else class="profile-avatar">{{ (store.currentUser.username || store.currentUser.userId || '我')[0] }}</div>
+          <div class="avatar-overlay">更换头像</div>
         </div>
+        <input ref="fileInput" type="file" accept="image/*" style="display:none" @change="handleAvatarChange" />
         <div>
           <div class="profile-name">{{ store.currentUser.username || '用户' }}</div>
           <div class="profile-id">用户ID: {{ store.currentUser.userId || '-' }}</div>
@@ -52,29 +103,24 @@ function saveProfile() {
           <div class="profile-stat-label">群聊</div>
         </div>
         <div class="profile-stat">
-          <div class="profile-stat-num">{{ store.recentChats.filter(c => c.type === 'ai').length }}</div>
+          <div class="profile-stat-num">1</div>
           <div class="profile-stat-label">AI 对话</div>
         </div>
       </div>
       <div class="profile-actions">
-        <div class="profile-action" @click="openEditProfile">
+        <div class="profile-action" @click="openEdit">
           <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
           <span>个人信息</span>
-          <span class="arrow">›</span>
-        </div>
-        <div class="profile-action">
-          <svg viewBox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z" /></svg>
-          <span>分享名片</span>
-          <span class="arrow">›</span>
-        </div>
-        <div class="profile-action">
-          <svg viewBox="0 0 24 24"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" /></svg>
-          <span>消息通知</span>
           <span class="arrow">›</span>
         </div>
         <div class="profile-action" @click="store.openChat('ai', 'ai', 'AI 助手')">
           <span class="ai-badge" style="width:24px;height:24px;font-size:11px;border-radius:6px">AI</span>
           <span style="color:var(--wx-green)">AI 助手</span>
+          <span class="arrow">›</span>
+        </div>
+        <div class="profile-action" @click="store.switchScreen('ai-settings')">
+          <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" /></svg>
+          <span>AI 设置</span>
           <span class="arrow">›</span>
         </div>
         <div class="profile-action" @click="store.logout()" style="color:var(--wx-danger)">
@@ -85,26 +131,20 @@ function saveProfile() {
       </div>
     </div>
 
-    <!-- 编辑个人信息弹窗 -->
-    <div v-if="showEditProfile" class="modal-overlay" @click.self="showEditProfile=false">
+    <!-- 编辑弹窗 -->
+    <div v-if="showEdit" class="modal-overlay" @click.self="showEdit=false">
       <div class="modal-card fade-in">
         <div class="modal-title">编辑个人信息</div>
-        <div class="edit-avatar-section">
-          <div class="edit-avatar">
-            {{ (store.currentUser.username || '我')[0] }}
-          </div>
-          <div class="edit-avatar-hint">点击更换头像</div>
-        </div>
         <div class="login-field">
           <label>用户名</label>
-          <input v-model="editUsername" type="text" placeholder="请输入用户名">
+          <input v-model="editUsername" type="text" placeholder="请输入用户名" maxlength="20">
         </div>
         <div class="login-field">
-          <label>昵称（选填）</label>
-          <input v-model="editNickname" type="text" placeholder="请输入昵称">
+          <label>用户ID</label>
+          <input type="text" :value="store.currentUser.userId" disabled style="opacity:.6">
         </div>
         <div class="modal-actions">
-          <button class="modal-btn modal-btn-cancel" @click="showEditProfile=false">取消</button>
+          <button class="modal-btn modal-btn-cancel" @click="showEdit=false">取消</button>
           <button class="modal-btn modal-btn-confirm" @click="saveProfile">保存</button>
         </div>
       </div>
@@ -115,12 +155,11 @@ function saveProfile() {
 <style scoped>
 .profile-card{padding:24px 16px;display:flex;flex-direction:column;gap:20px}
 .profile-header{display:flex;align-items:center;gap:16px}
-.profile-avatar{
-  width:64px;height:64px;border-radius:var(--wx-radius-lg);background:var(--wx-green);
-  display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;
-  overflow:hidden;
-}
-.profile-avatar img{width:100%;height:100%;object-fit:cover}
+.profile-avatar-wrap{position:relative;cursor:pointer;width:64px;height:64px}
+.profile-avatar{width:64px;height:64px;border-radius:var(--wx-radius-lg);background:var(--wx-green);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff}
+.profile-avatar-img{width:64px;height:64px;border-radius:var(--wx-radius-lg);object-fit:cover}
+.avatar-overlay{position:absolute;inset:0;background:rgba(0,0,0,.5);border-radius:var(--wx-radius-lg);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;opacity:0;transition:opacity .2s}
+.profile-avatar-wrap:hover .avatar-overlay{opacity:1}
 .profile-name{font-size:20px;font-weight:600}
 .profile-id{font-size:13px;color:var(--wx-text-secondary)}
 .profile-stats{display:flex;gap:0;border:1px solid var(--wx-border);border-radius:var(--wx-radius-lg);overflow:hidden}
@@ -129,48 +168,24 @@ function saveProfile() {
 .profile-stat-num{font-size:20px;font-weight:700;color:var(--wx-green)}
 .profile-stat-label{font-size:12px;color:var(--wx-text-secondary);margin-top:2px}
 .profile-actions{display:flex;flex-direction:column;gap:8px}
-.profile-action{
-  display:flex;align-items:center;gap:12px;padding:14px 16px;
-  background:var(--wx-white);border-radius:var(--wx-radius);border:1px solid var(--wx-border);
-  cursor:pointer;transition:all .15s;font-size:15px;
-}
+.profile-action{display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--wx-white);border-radius:var(--wx-radius);border:1px solid var(--wx-border);cursor:pointer;transition:all .15s;font-size:15px}
 .profile-action+.profile-action{margin-top:-1px;border-top:none}
 .profile-action:hover{border-color:var(--wx-green)}
 .profile-action svg{width:20px;height:20px;fill:var(--wx-text-secondary)}
 .arrow{margin-left:auto;color:var(--wx-text-tertiary)}
 
-/* 弹窗 */
-.modal-overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;
-  display:flex;align-items:center;justify-content:center;padding:24px;
-}
-.modal-card{
-  background:var(--wx-white);border-radius:16px;padding:28px 24px;width:100%;max-width:380px;
-  box-shadow:0 12px 40px rgba(0,0,0,.15);
-}
+.toast-success{margin:0 16px 8px;padding:8px 12px;background:rgba(7,193,96,.1);color:var(--wx-green);border-radius:8px;font-size:13px;text-align:center}
+.toast-error{margin:0 16px 8px;padding:8px 12px;background:rgba(250,81,81,.1);color:#FA5151;border-radius:8px;font-size:13px;text-align:center}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px}
+.modal-card{background:var(--wx-white);border-radius:16px;padding:28px 24px;width:100%;max-width:380px;box-shadow:0 12px 40px rgba(0,0,0,.15)}
 .modal-title{font-size:18px;font-weight:600;margin-bottom:20px;text-align:center}
-.edit-avatar-section{display:flex;flex-direction:column;align-items:center;margin-bottom:20px}
-.edit-avatar{
-  width:72px;height:72px;border-radius:var(--wx-radius-lg);background:var(--wx-green);
-  display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:#fff;
-  cursor:pointer;transition:all .15s;
-}
-.edit-avatar:hover{opacity:0.9}
-.edit-avatar-hint{font-size:12px;color:var(--wx-text-secondary);margin-top:8px}
 .modal-card .login-field{margin-bottom:14px}
 .modal-card .login-field label{display:block;font-size:13px;color:var(--wx-text-secondary);margin-bottom:6px}
-.modal-card .login-field input{
-  width:100%;padding:10px 12px;border:1px solid rgba(0,0,0,.1);border-radius:8px;
-  font-size:14px;outline:none;font-family:var(--font-body);background:rgba(255,255,255,.7);
-}
+.modal-card .login-field input{width:100%;padding:10px 12px;border:1px solid rgba(0,0,0,.1);border-radius:8px;font-size:14px;outline:none;font-family:var(--font-body);background:rgba(255,255,255,.7)}
 .modal-card .login-field input:focus{border-color:var(--wx-green)}
 .modal-actions{display:flex;gap:12px;margin-top:20px}
-.modal-btn{
-  flex:1;padding:11px;border:none;border-radius:8px;font-size:15px;font-weight:500;
-  cursor:pointer;transition:all .15s;font-family:var(--font-body);
-}
+.modal-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;transition:all .15s;font-family:var(--font-body)}
 .modal-btn-cancel{background:var(--wx-bg);color:var(--wx-text-secondary)}
-.modal-btn-cancel:hover{background:var(--wx-border)}
 .modal-btn-confirm{background:var(--wx-green);color:#fff}
-.modal-btn-confirm:hover{background:var(--wx-green-dark)}
 </style>

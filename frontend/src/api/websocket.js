@@ -47,6 +47,7 @@ const MessageType = {
   UPLOAD_AVATAR: 70,
   UPLOAD_GROUP_AVATAR: 71,
 
+  HEARTBEAT: 0,
   RESPONSE_OK: 100,
   RESPONSE_ERROR: 101
 }
@@ -63,11 +64,14 @@ class WebSocketClient {
     this.pendingMessages = []
     this.userId = null
     this.receiveBuffer = new Uint8Array(0)
+    this.heartbeatTimer = null
+    this.heartbeatInterval = 5000
   }
 
   connect(url) {
     return new Promise((resolve, reject) => {
       this.url = url
+      this.maxReconnectAttempts = 5
       this.ws = new WebSocket(url)
       this.ws.binaryType = 'arraybuffer'
 
@@ -76,6 +80,8 @@ class WebSocketClient {
         this.isConnected = true
         this.reconnectAttempts = 0
         this.receiveBuffer = new Uint8Array(0)
+
+        this._startHeartbeat()
 
         while (this.pendingMessages.length > 0) {
           const msg = this.pendingMessages.shift()
@@ -91,6 +97,7 @@ class WebSocketClient {
       this.ws.onclose = () => {
         console.log('[WS] 连接关闭')
         this.isConnected = false
+        this._stopHeartbeat()
         this._reconnect()
       }
 
@@ -103,12 +110,29 @@ class WebSocketClient {
 
   disconnect() {
     this.maxReconnectAttempts = 0
+    this._stopHeartbeat()
     if (this.ws) {
       this.ws.close()
       this.ws = null
     }
     this.isConnected = false
     this.userId = null
+  }
+
+  _startHeartbeat() {
+    this._stopHeartbeat()
+    this.heartbeatTimer = setInterval(() => {
+      if (this.isConnected) {
+        this.send({ type: MessageType.HEARTBEAT, content: 'ping' })
+      }
+    }, this.heartbeatInterval)
+  }
+
+  _stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
   }
 
   _reconnect() {
@@ -147,7 +171,9 @@ class WebSocketClient {
 
       try {
         const msg = JSON.parse(jsonStr)
-        this._dispatch(msg)
+        if (msg.type !== MessageType.HEARTBEAT) {
+          this._dispatch(msg)
+        }
       } catch (e) {
         console.error('[WS] JSON 解析失败:', e, jsonStr)
       }

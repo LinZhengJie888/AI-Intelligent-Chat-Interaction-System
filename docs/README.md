@@ -10,7 +10,7 @@
 
 **核心特点：**
 - 自研 Reactor 网络框架（Epoll + 线程池）
-- 前后端分离，WebSocket 代理转发
+- 前后端分离，WebSocket 代理转发 + HTTP 静态服务
 - 多厂商 AI API 兼容接入
 - 微信浅色风格 UI
 
@@ -60,7 +60,7 @@ AI智能聊天互动系统/
 │   │   ├── module/             # 业务模块实现
 │   │   └── common/             # 工具实现
 │   └── static/                 # 静态资源（头像等）
-│       └── avatars/
+│       └── avatars/            # 用户/群聊头像存储
 │
 ├── frontend/                   # Vue3 前端
 │   ├── index.html              # 入口 HTML
@@ -70,7 +70,7 @@ AI智能聊天互动系统/
 │       ├── main.js             # Vue 应用入口
 │       ├── App.vue             # 根组件（页面切换）
 │       ├── api/
-│       │   └── websocket.js    # WebSocket 通信封装
+│       │   └── websocket.js    # WebSocket 通信封装（4字节长度头+JSON）
 │       ├── store/
 │       │   └── index.js        # 全局状态管理
 │       ├── components/
@@ -80,12 +80,12 @@ AI智能聊天互动系统/
 │       └── screens/
 │           ├── LoginScreen.vue       # 登录/注册页
 │           ├── ChatListScreen.vue    # 聊天列表页
-│           ├── SingleChatScreen.vue  # 单聊页
+│           ├── SingleChatScreen.vue  # 单聊页（支持图片发送）
 │           ├── GroupChatScreen.vue   # 群聊页
 │           ├── AIChatScreen.vue      # AI 对话页
-│           ├── ContactsScreen.vue    # 通讯录页
+│           ├── ContactsScreen.vue    # 通讯录页（好友请求审核）
 │           ├── GroupsScreen.vue      # 群聊列表页
-│           └── ProfileScreen.vue     # 个人资料页
+│           └── ProfileScreen.vue     # 个人资料页（头像上传）
 │
 ├── db/                         # 数据库
 │   └── mysql/
@@ -99,7 +99,7 @@ AI智能聊天互动系统/
 │
 ├── config.ini                  # 运行配置文件
 ├── makefile                    # 后端编译脚本
-├── proxy-server.js             # WebSocket → TCP 代理服务器
+├── proxy-server.js             # WebSocket 代理 + HTTP 静态服务器
 └── package.json                # 代理服务器依赖
 ```
 
@@ -131,10 +131,13 @@ AI智能聊天互动系统/
 
 ```
 浏览器前端 ──WebSocket(8081)──► proxy-server.js ──TCP(8080)──► C++后端
+                                    │
+                                    └── HTTP(8082) ──► 静态文件（头像等）
 ```
 
 - **前端**：发送/接收 4字节大端序长度头 + JSON
-- **代理**：透明转发，不解析内容
+- **代理**：WebSocket → TCP 透明转发，不解析内容
+- **HTTP 服务**：提供静态文件访问（头像等），端口 8082
 - **后端**：Buffer 类 (sep=1) 解析报文
 
 ### 报文格式
@@ -171,6 +174,7 @@ AI智能聊天互动系统/
 | 登录 | 用户ID + 密码 + 动态验证码 |
 | 验证码 | 6位数字+字母，图像形式，5分钟有效，1分钟冷却 |
 | 密码加密 | MD5 加密存储 |
+| 头像上传 | 支持 jpg/png，Base64 传输，服务器存储 |
 
 ### 4.2 聊天功能
 
@@ -179,7 +183,9 @@ AI智能聊天互动系统/
 | 单聊 | 一对一私聊，消息实时推送 |
 | 群聊 | 多人群聊，支持群成员管理 |
 | AI 对话 | 按键调用或 @AI 召唤 |
+| 图片发送 | 支持发送图片消息 |
 | 消息存储 | MySQL 持久化，Redis 缓存热点 |
+| 聊天记录 | 页面刷新后自动加载历史记录 |
 
 ### 4.3 好友系统
 
@@ -188,6 +194,7 @@ AI智能聊天互动系统/
 | 添加好友 | 输入用户ID，附验证消息 |
 | 请求审核 | 对方同意/拒绝，拒绝有冷却期 |
 | 好友列表 | 显示好友头像、用户名 |
+| 好友请求通知 | 实时推送好友请求 |
 
 ### 4.4 群聊系统
 
@@ -211,7 +218,7 @@ AI智能聊天互动系统/
 
 ## 五、消息类型定义
 
-后端 `ChatService.h` 中定义的消息类型枚举：
+后端 `ChatService.h` 中定义的消息类型枚举（前后端完全对齐）：
 
 ```cpp
 enum class MessageType {
@@ -229,6 +236,8 @@ enum class MessageType {
     FRIEND_REJECT = 22,     // 拒绝好友
     FRIEND_LIST = 23,       // 好友列表
     FRIEND_DELETE = 24,     // 删除好友
+    FRIEND_REQUEST_LIST = 25, // 好友请求列表
+    FRIEND_SET_REMARK = 26, // 设置好友备注
 
     // 群聊
     GROUP_CREATE = 30,      // 创建群聊
@@ -238,15 +247,28 @@ enum class MessageType {
     GROUP_MESSAGE = 34,     // 群聊消息
     GROUP_MEMBERS = 35,     // 群成员列表
     GROUP_LIST = 36,        // 群列表
+    GROUP_MODIFY_NAME = 37, // 修改群名
+    GROUP_LEAVE = 39,       // 退出群聊
 
     // 聊天
     CHAT_PRIVATE = 40,      // 私聊消息
     CHAT_HISTORY = 41,      // 聊天记录
+    MESSAGE_RECALL = 42,    // 消息撤回
+    MESSAGE_READ = 43,      // 消息已读
 
     // AI
     AI_REQUEST = 50,        // AI 请求
     AI_AT = 51,             // AI @召唤
     AI_SETTING = 52,        // AI 设置
+
+    // 其他
+    UPDATE_USERNAME = 62,   // 修改用户名
+    GROUP_KICK = 63,        // 踢出群成员
+    GROUP_REQUEST_LIST = 64,// 加群请求列表
+
+    // 头像
+    UPLOAD_AVATAR = 70,     // 上传用户头像
+    UPLOAD_GROUP_AVATAR = 71, // 上传群聊头像
 
     // 响应
     RESPONSE_OK = 100,      // 成功响应
@@ -277,7 +299,7 @@ default_tone = 0        # 默认语气
 default_priority = 0    # 默认优先级
 
 [server]
-port = 8080             # 服务器端口
+port = 8080             # TCP 服务器端口
 thread_pool_size = 4    # 线程池大小
 avatar_storage_path = ./backend/static/avatars
 
@@ -297,7 +319,7 @@ port = 6379            # Redis 端口
 | g++ | 支持 C++11 | 后端编译 |
 | MySQL | 5.7+ | 主数据库 |
 | Redis | 6.0+ | 缓存 |
-| Node.js | 18+ | 前端运行 |
+| Node.js | 18+ | 前端运行、代理服务器 |
 | libcurl | - | HTTP 请求 |
 | libmysqlclient | - | MySQL 客户端 |
 | libhiredis | - | Redis 客户端 |
@@ -330,7 +352,7 @@ sudo systemctl start redis
 
 ```bash
 # 编译
-make
+make clean && make
 
 # 启动（默认监听 8080 端口）
 ./ai_chat_server
@@ -343,18 +365,20 @@ Server started successfully!
 Waiting for connections...
 ```
 
-### 7.5 启动 WebSocket 代理
+### 7.5 启动代理服务器
 
 ```bash
-# 安装代理依赖
+# 安装依赖（首次）
 npm install
 
-# 启动代理（监听 8081，转发到 8080）
+# 启动代理（包含 WebSocket 代理和 HTTP 静态服务）
 node proxy-server.js
 ```
 
 启动成功会输出：
 ```
+HTTP static server running on http://localhost:8082
+Serving static files from: /path/to/backend/static
 WebSocket proxy server running on ws://localhost:8081
 Forwarding to 127.0.0.1:8080
 ```
@@ -364,7 +388,7 @@ Forwarding to 127.0.0.1:8080
 ```bash
 cd frontend
 
-# 安装依赖
+# 安装依赖（首次）
 npm install
 
 # 启动开发服务器
@@ -386,7 +410,20 @@ VITE v8.x.x  ready in xxx ms
 
 ---
 
-## 八、快速启动脚本
+## 八、服务端口说明
+
+| 端口 | 服务 | 协议 | 说明 |
+|------|------|------|------|
+| 8080 | C++ 后端 | TCP | 主业务服务器，自定义协议 |
+| 8081 | WebSocket 代理 | WS | 前端连接入口，转发到 8080 |
+| 8082 | HTTP 静态服务 | HTTP | 头像等静态文件访问 |
+| 5173 | 前端开发服务器 | HTTP | Vite 热更新 |
+| 3306 | MySQL | TCP | 数据库 |
+| 6379 | Redis | TCP | 缓存 |
+
+---
+
+## 九、快速启动脚本
 
 可以创建一个启动脚本 `start.sh`：
 
@@ -413,33 +450,40 @@ echo "   Redis 已运行"
 echo "3. 检查后端..."
 if [ ! -f "./ai_chat_server" ]; then
     echo "   编译后端..."
-    make
+    make clean && make
 fi
 echo "   后端已就绪"
 
 # 4. 启动后端
 echo "4. 启动后端服务器..."
-./ai_chat_server &
+./ai_chat_server > /tmp/backend.log 2>&1 &
 BACKEND_PID=$!
 sleep 1
 
-# 5. 启动代理
-echo "5. 启动 WebSocket 代理..."
-node proxy-server.js &
+# 5. 启动代理（含 HTTP 静态服务）
+echo "5. 启动代理服务器..."
+node proxy-server.js > /tmp/proxy.log 2>&1 &
 PROXY_PID=$!
 sleep 1
 
 # 6. 启动前端
 echo "6. 启动前端..."
 cd frontend
-npm run dev &
+npm run dev > /tmp/frontend.log 2>&1 &
 FRONTEND_PID=$!
+sleep 2
 
 echo ""
 echo "========== 系统已启动 =========="
-echo "后端:  http://localhost:8080"
-echo "代理:  ws://localhost:8081"
-echo "前端:  http://localhost:5173"
+echo "后端:      http://localhost:8080 (TCP)"
+echo "WebSocket: ws://localhost:8081"
+echo "HTTP静态:  http://localhost:8082"
+echo "前端:      http://localhost:5173"
+echo ""
+echo "日志文件："
+echo "  后端: /tmp/backend.log"
+echo "  代理: /tmp/proxy.log"
+echo "  前端: /tmp/frontend.log"
 echo ""
 echo "按 Ctrl+C 停止所有服务"
 
@@ -450,7 +494,7 @@ wait
 
 ---
 
-## 九、数据库表结构
+## 十、数据库表结构
 
 ### 核心表
 
@@ -460,11 +504,12 @@ wait
 | `group_chat` | 群聊表 | id, group_id, group_name, creator_id, avatar_path |
 | `chat_record` | 聊天记录 | id, sender_id, receiver_id, group_id, content, send_time, is_ai |
 | `friend_request` | 好友请求 | id, from_user_id, to_user_id, request_msg, status, cooling_time |
+| `friend_relation` | 好友关系 | id, user_id, friend_id, remark, create_time |
 | `verification_code` | 验证码 | id, phone, code, expire_time, is_used |
 
 ---
 
-## 十、Redis 缓存设计
+## 十一、Redis 缓存设计
 
 | Key 格式 | 说明 |
 |----------|------|
@@ -475,7 +520,7 @@ wait
 
 ---
 
-## 十一、常见问题
+## 十二、常见问题
 
 ### Q: 编译报错找不到头文件
 A: 检查是否安装了 `libmysqlclient-dev`、`libcurl4-openssl-dev`、`libhiredis-dev`
@@ -489,9 +534,15 @@ A: 确保 `proxy-server.js` 已启动（端口 8081），后端已启动（端�
 ### Q: 验证码不显示
 A: 当前使用本地 SVG 生成验证码，无需后端支持
 
+### Q: 头像上传后刷新看不到
+A: 确保 `proxy-server.js` 已启动（包含 HTTP 静态服务，端口 8082），头像文件存储在 `backend/static/avatars/`
+
+### Q: 好友请求列表为空
+A: 确保后端已重新编译（`make clean && make`），好友请求使用字符串 user_id 存储
+
 ---
 
-## 十二、相关文档
+## 十三、相关文档
 
 - [产品需求文档 (PRD.md)](./PRD.md)
 - [架构设计文档 (ARCHITECTURE.md)](./ARCHITECTURE.md)

@@ -207,6 +207,12 @@ private:
     bool createAILogTable();
     
     /**
+     * @brief 创建聊天AI设置表
+     * @return 创建成功返回true，失败返回false
+     */
+    bool createChatAISettingsTable();
+    
+    /**
      * @brief 生成请求ID
      * @return 请求ID字符串
      */
@@ -228,14 +234,16 @@ private:
     
     /**
      * @brief 发送AI回复给用户
-     * @param user_id 用户ID
+     * @param ai_nickname AI昵称
      * @param target_id 目标ID
      * @param messages 消息列表
      * @param is_group 是否是群聊
+     * @param origin_user_id 发起请求的用户ID
+     * @param chat_key 聊天标识
      */
-    void sendAIResponse(const std::string& user_id, const std::string& target_id, 
+    void sendAIResponse(const std::string& ai_nickname, const std::string& target_id, 
                        const std::vector<std::string>& messages, bool is_group,
-                       const std::string& origin_user_id);
+                       const std::string& origin_user_id, const std::string& chat_key);
     
     /**
      * @brief 异步处理AI请求

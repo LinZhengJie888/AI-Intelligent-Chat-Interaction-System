@@ -39,7 +39,6 @@ static std::string escapeJson(const std::string& str) {
         switch (c) {
             case '"': result += "\\\""; break;
             case '\\': result += "\\\\"; break;
-            case '\'': result += "''"; break;  // SQL单引号转义
             case '\b': result += "\\b"; break;
             case '\f': result += "\\f"; break;
             case '\n': result += "\\n"; break;
@@ -60,6 +59,30 @@ static std::string escapeJson(const std::string& str) {
 static uint64_t getUserIdNum(Database& db, const std::string& user_id) {
     char sql[256];
     snprintf(sql, sizeof(sql), "SELECT id FROM user WHERE user_id='%s'", user_id.c_str());
+    
+    MYSQL_RES* res = db.query(sql);
+    if (!res) return 0;
+    
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row || !row[0]) {
+        db.freeResult(res);
+        return 0;
+    }
+    
+    uint64_t id = strtoull(row[0], nullptr, 10);
+    db.freeResult(res);
+    return id;
+}
+
+/**
+ * @brief 根据群聊ID字符串获取数字ID
+ * @param db 数据库连接
+ * @param group_id 群聊ID字符串
+ * @return 群聊数字ID，失败返回0
+ */
+static uint64_t getGroupNumId(Database& db, const std::string& group_id) {
+    char sql[256];
+    snprintf(sql, sizeof(sql), "SELECT id FROM group_chat WHERE group_id='%s'", group_id.c_str());
     
     MYSQL_RES* res = db.query(sql);
     if (!res) return 0;
@@ -116,6 +139,55 @@ static std::string getJsonValue(const std::string& json, const std::string& key)
                     case 'n': unescaped += '\n'; i++; break;
                     case 'r': unescaped += '\r'; i++; break;
                     case 't': unescaped += '\t'; i++; break;
+                    case 'u': {
+                        // Unicode转义 \uXXXX
+                        if (i + 5 < value.size()) {
+                            std::string hex = value.substr(i + 2, 4);
+                            unsigned long codepoint = strtoul(hex.c_str(), nullptr, 16);
+                            
+                            // 检查是否是代理对
+                            if (codepoint >= 0xD800 && codepoint <= 0xDBFF && i + 11 < value.size() && value[i + 6] == '\\' && value[i + 7] == 'u') {
+                                std::string hex2 = value.substr(i + 8, 4);
+                                unsigned long codepoint2 = strtoul(hex2.c_str(), nullptr, 16);
+                                if (codepoint2 >= 0xDC00 && codepoint2 <= 0xDFFF) {
+                                    // 解码代理对
+                                    unsigned long full_codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (codepoint2 - 0xDC00);
+                                    // UTF-8编码
+                                    if (full_codepoint <= 0x7F) {
+                                        unescaped += static_cast<char>(full_codepoint);
+                                    } else if (full_codepoint <= 0x7FF) {
+                                        unescaped += static_cast<char>(0xC0 | (full_codepoint >> 6));
+                                        unescaped += static_cast<char>(0x80 | (full_codepoint & 0x3F));
+                                    } else if (full_codepoint <= 0xFFFF) {
+                                        unescaped += static_cast<char>(0xE0 | (full_codepoint >> 12));
+                                        unescaped += static_cast<char>(0x80 | ((full_codepoint >> 6) & 0x3F));
+                                        unescaped += static_cast<char>(0x80 | (full_codepoint & 0x3F));
+                                    } else {
+                                        unescaped += static_cast<char>(0xF0 | (full_codepoint >> 18));
+                                        unescaped += static_cast<char>(0x80 | ((full_codepoint >> 12) & 0x3F));
+                                        unescaped += static_cast<char>(0x80 | ((full_codepoint >> 6) & 0x3F));
+                                        unescaped += static_cast<char>(0x80 | (full_codepoint & 0x3F));
+                                    }
+                                    i += 11; // 跳过 \uXXXX\uXXXX
+                                    break;
+                                }
+                            }
+                            
+                            // 单个Unicode码点
+                            if (codepoint <= 0x7F) {
+                                unescaped += static_cast<char>(codepoint);
+                            } else if (codepoint <= 0x7FF) {
+                                unescaped += static_cast<char>(0xC0 | (codepoint >> 6));
+                                unescaped += static_cast<char>(0x80 | (codepoint & 0x3F));
+                            } else {
+                                unescaped += static_cast<char>(0xE0 | (codepoint >> 12));
+                                unescaped += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                                unescaped += static_cast<char>(0x80 | (codepoint & 0x3F));
+                            }
+                            i += 5; // 跳过 \uXXXX
+                        }
+                        break;
+                    }
                     default: unescaped += value[i]; break;
                 }
             } else {
@@ -193,6 +265,12 @@ bool AiService::init() {
     // 创建AI日志表
     if (!createAILogTable()) {
         std::cerr << "Failed to create AI log table" << std::endl;
+        return false;
+    }
+    
+    // 创建聊天AI设置表
+    if (!createChatAISettingsTable()) {
+        std::cerr << "Failed to create chat AI settings table" << std::endl;
         return false;
     }
     
@@ -718,6 +796,25 @@ bool AiService::createAILogTable() {
 }
 
 /**
+ * @brief 创建聊天AI设置表
+ */
+bool AiService::createChatAISettingsTable() {
+    std::string sql = 
+        "CREATE TABLE IF NOT EXISTS chat_ai_settings ("
+        "id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+        "chat_key VARCHAR(64) NOT NULL UNIQUE,"
+        "nickname VARCHAR(32) DEFAULT 'AI助手',"
+        "tone TINYINT DEFAULT 0,"
+        "priority TINYINT DEFAULT 1,"
+        "updated_by VARCHAR(32) DEFAULT '',"
+        "update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"
+        "INDEX idx_chat_key (chat_key)"
+        ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    
+    return db_.execute(sql);
+}
+
+/**
  * @brief 生成请求ID
  */
 std::string AiService::generateRequestId() {
@@ -753,58 +850,88 @@ void AiService::logAICall(const std::string& request_id, const std::string& user
 /**
  * @brief 发送AI回复给用户
  */
-void AiService::sendAIResponse(const std::string& user_id, const std::string& target_id, 
+void AiService::sendAIResponse(const std::string& ai_nickname, const std::string& target_id, 
                                 const std::vector<std::string>& messages, bool is_group,
-                                const std::string& origin_user_id) {
+                                const std::string& origin_user_id, const std::string& chat_key) {
     std::cout << "[AI] Sending AI response to " << target_id << ", messages=" << messages.size() << std::endl;
     ChatService& chat_service = ChatService::getInstance();
 
-    // 获取数字ID（用于保存聊天记录）
-    uint64_t user_id_num = getUserIdNum(db_, user_id);
-    uint64_t target_id_num = getUserIdNum(db_, target_id);
+    // 获取目标用户的数字ID（用于保存聊天记录）
+    uint64_t origin_user_id_num = getUserIdNum(db_, origin_user_id);
 
     for (const auto& message : messages) {
-        // 构建AI回复消息
-        std::ostringstream oss;
-        oss << "{\"type\":" << (is_group ? 34 : 40)  // GROUP_MESSAGE or CHAT_PRIVATE
-            << ",\"from_user_id\":\"" << user_id << "\""
-            << ",\"to_user_id\":\"" << origin_user_id << "\""
-            << ",\"content\":\"" << escapeJson(message) << "\""
-            << ",\"extra\":\"{\\\"is_ai\\\":true}\""
-            << ",\"timestamp\":\"" << util::getCurrentTime() << "\"}";
-        std::cout << "[AI] Constructed message: " << oss.str() << std::endl;
+        if (is_group) {
+            // 群聊：to_user_id 为群ID，extra 包含 group_id 和 chat_key
+            std::ostringstream oss;
+            oss << "{\"type\":34"
+                << ",\"from_user_id\":\"" << escapeJson(ai_nickname) << "\""
+                << ",\"to_user_id\":\"" << target_id << "\""
+                << ",\"content\":\"" << escapeJson(message) << "\""
+                << ",\"extra\":\"{\\\"is_ai\\\":true,\\\"group_id\\\":\\\"" << target_id 
+                << "\\\",\\\"chat_key\\\":\\\"" << escapeJson(chat_key) << "\\\"}\""
+                << ",\"timestamp\":\"" << util::getCurrentTime() << "\"}";
 
-        std::string msg_str = oss.str();
+            std::string msg_str = oss.str();
+            std::ostringstream wrapper;
+            wrapper << "{\"type\":34,\"code\":0,\"msg\":\"\",\"data\":" << msg_str 
+                    << ",\"timestamp\":\"" << util::getCurrentTime() << "\"}";
 
-        // 将 AI 原始消息包装为统一响应格式（与 ChatService::buildResponse 相同）
-        std::ostringstream wrapper;
-        wrapper << "{"
-                << "\"type\":" << (is_group ? 34 : 40)
-                << ",\"code\":0,\"msg\":\"\""
-                << ",\"data\":" << msg_str
-                << ",\"timestamp\":\"" << util::getCurrentTime() << "\"} ";
+            chat_service.broadcastToGroup(target_id, wrapper.str());
+        } else {
+            // 私聊：需要为双方生成不同的 chat_key
+            // 对于发起者 (origin_user_id)，chat_key 是 "single:target_id"
+            // 对于接收者 (target_id)，chat_key 是 "single:origin_user_id"
+            std::string origin_chat_key = chat_key;  // 发起者的 chat_key
+            std::string target_chat_key = "single:" + origin_user_id;  // 接收者的 chat_key
 
-        std::string notification = wrapper.str();
+            // 构建给发起者的消息
+            std::ostringstream oss_origin;
+            oss_origin << "{\"type\":40"
+                << ",\"from_user_id\":\"" << escapeJson(ai_nickname) << "\""
+                << ",\"to_user_id\":\"" << origin_user_id << "\""
+                << ",\"content\":\"" << escapeJson(message) << "\""
+                << ",\"extra\":\"{\\\"is_ai\\\":true,\\\"chat_key\\\":\\\"" << escapeJson(origin_chat_key) << "\\\"}\""
+                << ",\"timestamp\":\"" << util::getCurrentTime() << "\"}";
+
+            // 构建给接收者的消息
+            std::ostringstream oss_target;
+            oss_target << "{\"type\":40"
+                << ",\"from_user_id\":\"" << escapeJson(ai_nickname) << "\""
+                << ",\"to_user_id\":\"" << target_id << "\""
+                << ",\"content\":\"" << escapeJson(message) << "\""
+                << ",\"extra\":\"{\\\"is_ai\\\":true,\\\"chat_key\\\":\\\"" << escapeJson(target_chat_key) << "\\\"}\""
+                << ",\"timestamp\":\"" << util::getCurrentTime() << "\"}";
+
+            // 包装并发送给发起者
+            std::ostringstream wrapper_origin;
+            wrapper_origin << "{\"type\":40,\"code\":0,\"msg\":\"\",\"data\":" << oss_origin.str() 
+                          << ",\"timestamp\":\"" << util::getCurrentTime() << "\"}";
+            chat_service.broadcastToUser(origin_user_id, wrapper_origin.str());
+
+            // 包装并发送给接收者
+            std::ostringstream wrapper_target;
+            wrapper_target << "{\"type\":40,\"code\":0,\"msg\":\"\",\"data\":" << oss_target.str() 
+                          << ",\"timestamp\":\"" << util::getCurrentTime() << "\"}";
+            chat_service.broadcastToUser(target_id, wrapper_target.str());
+        }
+
+        // 保存到聊天记录
+        ChatRecord record;
+        record.sender_id = 0;  // 0 表示 AI
+        record.content = message;
+        record.is_ai = 1;
 
         if (is_group) {
-            chat_service.broadcastToGroup(target_id, notification);
+            uint64_t group_id_num = getGroupNumId(db_, target_id);
+            record.group_id = group_id_num;
+            record.receiver_id = 0;
         } else {
-            std::cout << "[AI] Sending response to origin user " << origin_user_id << std::endl;
-            chat_service.broadcastToUser(origin_user_id, notification);
-        }
-
-        // 保存到聊天记录（使用数字ID）
-        if (user_id_num > 0 && target_id_num > 0) {
-            ChatRecord record;
-            record.sender_id = user_id_num;
-            record.receiver_id = target_id_num;
             record.group_id = 0;
-            record.content = message;
-            record.is_ai = 1;
-
-            ChatRecordDAO record_dao(db_);
-            record_dao.insert(record);
+            record.receiver_id = origin_user_id_num;
         }
+
+        ChatRecordDAO record_dao(db_);
+        record_dao.insert(record);
 
         // 添加延迟，模拟逐条发送
         std::this_thread::sleep_for(std::chrono::milliseconds(300));
@@ -865,13 +992,13 @@ void AiService::asyncProcessRequest(const AIRequest& request) {
         
         // 发送回复
         std::cout << "[AI] Sending response to user: " << request.target_id << std::endl;
-        sendAIResponse(ai_nickname, request.target_id, messages, request.is_group, request.user_id);
+        sendAIResponse(ai_nickname, request.target_id, messages, request.is_group, request.user_id, chat_key);
         std::cout << "[AI] Response sent successfully" << std::endl;
     } else {
         // 发送错误消息
         std::cout << "[AI] Sending error message..." << std::endl;
         std::vector<std::string> error_messages = {response};
-        sendAIResponse(ai_nickname, request.target_id, error_messages, request.is_group, request.user_id);
+        sendAIResponse(ai_nickname, request.target_id, error_messages, request.is_group, request.user_id, chat_key);
     }
     
     // 从待处理队列移除

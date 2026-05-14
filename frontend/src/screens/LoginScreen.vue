@@ -1,24 +1,14 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import store from '../store'
 
 const activeTab = ref('login')
+const isLoading = ref(false)
 
 // 登录表单
-const loginForm = reactive({
-  userId: '',
-  password: '',
-  captchaCode: ''
-})
-
+const loginForm = reactive({ userId: '', password: '', captchaCode: '' })
 // 注册表单
-const regForm = reactive({
-  username: '',
-  userId: '',
-  password: '',
-  confirmPassword: '',
-  phone: ''
-})
+const regForm = reactive({ username: '', userId: '', password: '', confirmPassword: '', phone: '' })
 
 // 密码显隐
 const showLoginPwd = ref(false)
@@ -27,16 +17,13 @@ const showRegConfirmPwd = ref(false)
 
 // 错误信息
 const errors = reactive({
-  loginUserId: '',
-  loginPassword: '',
-  captcha: '',
-  regUsername: '',
-  regUserId: '',
-  regPassword: '',
-  regConfirm: '',
-  regPhone: '',
-  general: ''
+  loginUserId: '', loginPassword: '', captcha: '',
+  regUsername: '', regUserId: '', regPassword: '', regConfirm: '', regPhone: ''
 })
+
+// 通用提示
+const hintMsg = ref('')
+const hintType = ref('info') // 'info' | 'success' | 'error'
 
 // 验证码冷却
 const captchaCooldown = ref(0)
@@ -51,7 +38,6 @@ const pwdRules = computed(() => {
     digit: /[0-9]/.test(p)
   }
 })
-
 const pwdStrength = computed(() => {
   const n = Object.values(pwdRules.value).filter(Boolean).length
   if (n <= 1) return { text: '弱', color: '#FA5151' }
@@ -59,7 +45,7 @@ const pwdStrength = computed(() => {
   return { text: '强', color: '#07C160' }
 })
 
-// 生成本地验证码 SVG（演示用）
+// 本地验证码 SVG
 const captchaSvg = ref('')
 const captchaAnswer = ref('')
 
@@ -68,24 +54,19 @@ function generateCaptcha() {
   let code = ''
   for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)]
   captchaAnswer.value = code
-
   const colors = ['#E53935','#1E88E5','#43A047','#FB8C00','#8E24AA','#00ACC1']
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40">
-    <rect width="120" height="40" fill="#f0f0f0"/>`
-
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40" viewBox="0 0 120 40"><rect width="120" height="40" fill="#f0f0f0"/>`
   for (let i = 0; i < code.length; i++) {
     const color = colors[Math.floor(Math.random() * colors.length)]
     const rotate = Math.floor(Math.random() * 30) - 15
     const y = 26 + Math.floor(Math.random() * 6) - 3
     svg += `<text x="${14 + i * 18}" y="${y}" fill="${color}" font-size="22" font-weight="bold" font-family="monospace" transform="rotate(${rotate} ${14 + i * 18} ${y})">${code[i]}</text>`
   }
-
   for (let i = 0; i < 4; i++) {
     const x1 = Math.random() * 120, y1 = Math.random() * 40
     const x2 = Math.random() * 120, y2 = Math.random() * 40
     svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(0,0,0,0.15)" stroke-width="1"/>`
   }
-
   svg += '</svg>'
   captchaSvg.value = svg
 }
@@ -94,15 +75,23 @@ function refreshCaptcha() {
   if (captchaCooldown.value > 0) return
   generateCaptcha()
   captchaCooldown.value = 60
-  const timer = setInterval(() => {
-    captchaCooldown.value--
-    if (captchaCooldown.value <= 0) clearInterval(timer)
-  }, 1000)
+  const timer = setInterval(() => { captchaCooldown.value--; if (captchaCooldown.value <= 0) clearInterval(timer) }, 1000)
 }
 
-function clearErrors() {
-  Object.keys(errors).forEach(k => errors[k] = '')
+function clearErrors() { Object.keys(errors).forEach(k => errors[k] = '') }
+
+function showHint(msg, type = 'info') {
+  hintMsg.value = msg
+  hintType.value = type
 }
+
+// 监听 store 的错误/成功消息
+watch(() => store.errorMessage, (val) => {
+  if (val) showHint(val, 'error')
+})
+watch(() => store.successMessage, (val) => {
+  if (val) showHint(val, 'success')
+})
 
 function validateLogin() {
   clearErrors()
@@ -111,9 +100,7 @@ function validateLogin() {
   if (!loginForm.password) { errors.loginPassword = '请输入密码'; ok = false }
   else if (loginForm.password.length < 8) { errors.loginPassword = '密码至少8个字符'; ok = false }
   if (!loginForm.captchaCode.trim()) { errors.captcha = '请输入验证码'; ok = false }
-  else if (loginForm.captchaCode.toLowerCase() !== captchaAnswer.value.toLowerCase()) {
-    errors.captcha = '验证码错误'; ok = false
-  }
+  else if (loginForm.captchaCode.toLowerCase() !== captchaAnswer.value.toLowerCase()) { errors.captcha = '验证码错误'; ok = false }
   return ok
 }
 
@@ -131,36 +118,52 @@ function validateRegister() {
   return ok
 }
 
-function handleLogin() {
+async function handleLogin() {
   if (!validateLogin()) return
-  // 通过WebSocket发送登录请求
-  store.login(loginForm.userId, loginForm.password)
+  if (!store.wsConnected) { showHint('未连接到服务器，请稍后重试', 'error'); return }
+  isLoading.value = true
+  showHint('', 'info')
+  const success = await store.login(loginForm.userId, loginForm.password)
+  isLoading.value = false
+  if (success) {
+    // 登录成功，页面会自动切换
+  } else {
+    // 登录失败，刷新验证码
+    generateCaptcha()
+    loginForm.captchaCode = ''
+  }
 }
 
-function handleRegister() {
+async function handleRegister() {
   if (!validateRegister()) return
-  // 通过WebSocket发送注册请求
-  store.register(regForm.userId, regForm.username, regForm.password, regForm.phone)
-  // 注册成功后切到登录
-  activeTab.value = 'login'
-  errors.general = '注册请求已发送，请等待响应'
-  regForm.username = ''
-  regForm.userId = ''
-  regForm.password = ''
-  regForm.confirmPassword = ''
-  regForm.phone = ''
-  generateCaptcha()
+  if (!store.wsConnected) { showHint('未连接到服务器，请稍后重试', 'error'); return }
+  isLoading.value = true
+  showHint('', 'info')
+  const success = await store.register(regForm.userId, regForm.username, regForm.password, regForm.phone)
+  isLoading.value = false
+  if (success) {
+    // 注册成功，切到登录
+    showHint('注册成功，请登录', 'success')
+    activeTab.value = 'login'
+    regForm.username = ''
+    regForm.userId = ''
+    regForm.password = ''
+    regForm.confirmPassword = ''
+    regForm.phone = ''
+    generateCaptcha()
+  } else {
+    // 注册失败，保持在注册页
+  }
 }
 
 function switchTab(tab) {
   activeTab.value = tab
   clearErrors()
-  errors.general = ''
+  hintMsg.value = ''
+  store.clearMessages()
 }
 
-onMounted(() => {
-  generateCaptcha()
-})
+onMounted(() => { generateCaptcha() })
 </script>
 
 <template>
@@ -172,6 +175,12 @@ onMounted(() => {
       <h1 class="login-title">AI 智能聊天</h1>
       <p class="login-subtitle">智能沟通，从这里开始</p>
 
+      <!-- 连接状态 -->
+      <div v-if="!store.wsConnected && !store.wsConnecting" class="login-hint login-hint-error">
+        未连接到服务器，请检查后端是否启动
+      </div>
+      <div v-if="store.wsConnecting" class="login-hint">正在连接服务器...</div>
+
       <!-- Tab -->
       <div class="login-tabs">
         <button class="login-tab" :class="{ active: activeTab === 'login' }" @click="switchTab('login')">登录</button>
@@ -179,7 +188,9 @@ onMounted(() => {
       </div>
 
       <!-- 通用提示 -->
-      <div v-if="errors.general" class="login-hint">{{ errors.general }}</div>
+      <div v-if="hintMsg" class="login-hint" :class="{ 'login-hint-error': hintType === 'error', 'login-hint-success': hintType === 'success' }">
+        {{ hintMsg }}
+      </div>
 
       <!-- ===== 登录表单 ===== -->
       <form v-if="activeTab === 'login'" @submit.prevent="handleLogin">
@@ -220,7 +231,10 @@ onMounted(() => {
           <span v-if="captchaCooldown>0" class="captcha-tip">{{ captchaCooldown }}秒后可刷新</span>
         </div>
 
-        <button type="submit" class="login-btn login-btn-primary">登 录</button>
+        <button type="submit" class="login-btn login-btn-primary" :disabled="isLoading">
+          <span v-if="isLoading">登录中...</span>
+          <span v-else>登 录</span>
+        </button>
       </form>
 
       <!-- ===== 注册表单 ===== -->
@@ -288,7 +302,10 @@ onMounted(() => {
           <span v-if="errors.regPhone" class="field-err">{{ errors.regPhone }}</span>
         </div>
 
-        <button type="submit" class="login-btn login-btn-primary">注 册</button>
+        <button type="submit" class="login-btn login-btn-primary" :disabled="isLoading">
+          <span v-if="isLoading">注册中...</span>
+          <span v-else>注 册</span>
+        </button>
       </form>
 
       <!-- 底部装饰 -->
@@ -303,74 +320,38 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.login-screen{
-  background:linear-gradient(135deg,#E8F5E9 0%,#C8E6C9 30%,#A5D6A7 60%,#81C784 100%);
-  align-items:center;justify-content:center;padding:24px;
-}
-.login-card{
-  width:100%;max-width:420px;background:rgba(255,255,255,.85);
-  backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8);
-  border-radius:20px;padding:40px 32px;border:1px solid rgba(255,255,255,.6);
-  box-shadow:0 8px 40px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.04);
-}
-.login-logo{
-  width:64px;height:64px;background:var(--wx-green);border-radius:16px;
-  display:flex;align-items:center;justify-content:center;margin:0 auto 16px;
-  box-shadow:0 4px 16px rgba(7,193,96,.3);
-}
+.login-screen{background:linear-gradient(135deg,#E8F5E9 0%,#C8E6C9 30%,#A5D6A7 60%,#81C784 100%);align-items:center;justify-content:center;padding:24px}
+.login-card{width:100%;max-width:420px;background:rgba(255,255,255,.85);backdrop-filter:blur(24px) saturate(1.8);-webkit-backdrop-filter:blur(24px) saturate(1.8);border-radius:20px;padding:40px 32px;border:1px solid rgba(255,255,255,.6);box-shadow:0 8px 40px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.04)}
+.login-logo{width:64px;height:64px;background:var(--wx-green);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 4px 16px rgba(7,193,96,.3)}
 .login-logo svg{width:36px;height:36px;fill:#fff}
 .login-title{text-align:center;font-size:22px;font-weight:700;margin-bottom:4px}
 .login-subtitle{text-align:center;font-size:14px;color:var(--wx-text-secondary);margin-bottom:24px}
 .login-tabs{display:flex;margin-bottom:20px;border-bottom:1px solid var(--wx-border)}
-.login-tab{
-  flex:1;padding:10px;text-align:center;font-size:15px;font-weight:500;
-  border:none;background:transparent;cursor:pointer;color:var(--wx-text-secondary);
-  border-bottom:2px solid transparent;transition:all .2s;
-}
+.login-tab{flex:1;padding:10px;text-align:center;font-size:15px;font-weight:500;border:none;background:transparent;cursor:pointer;color:var(--wx-text-secondary);border-bottom:2px solid transparent;transition:all .2s}
 .login-tab.active{color:var(--wx-green);border-bottom-color:var(--wx-green)}
-.login-hint{
-  background:rgba(7,193,96,.1);color:var(--wx-green);
-  padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;text-align:center;
-}
+.login-hint{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;text-align:center;background:rgba(7,193,96,.1);color:var(--wx-green)}
+.login-hint-error{background:rgba(250,81,81,.1);color:#FA5151}
+.login-hint-success{background:rgba(7,193,96,.1);color:var(--wx-green)}
 .login-field{margin-bottom:14px}
 .login-field label{display:block;font-size:13px;color:var(--wx-text-secondary);margin-bottom:6px;font-weight:500}
-.input-wrap{
-  display:flex;align-items:center;border:1px solid rgba(0,0,0,.1);border-radius:8px;
-  background:rgba(255,255,255,.7);transition:all .2s;overflow:hidden;
-}
+.input-wrap{display:flex;align-items:center;border:1px solid rgba(0,0,0,.1);border-radius:8px;background:rgba(255,255,255,.7);transition:all .2s;overflow:hidden}
 .input-wrap:focus-within{border-color:var(--wx-green);box-shadow:0 0 0 3px rgba(7,193,96,.12)}
 .input-icon{width:20px;height:20px;fill:var(--wx-text-tertiary);margin-left:12px;flex-shrink:0}
-.input-wrap input{
-  flex:1;padding:12px;border:none;background:transparent;font-size:15px;outline:none;
-  font-family:var(--font-body);
-}
+.input-wrap input{flex:1;padding:12px;border:none;background:transparent;font-size:15px;outline:none;font-family:var(--font-body)}
 .input-wrap input::placeholder{color:var(--wx-text-tertiary)}
-.pwd-toggle{
-  width:36px;height:36px;border:none;background:transparent;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-}
+.pwd-toggle{width:36px;height:36px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .pwd-toggle svg{width:20px;height:20px;fill:var(--wx-text-tertiary)}
-
-/* 验证码 */
 .captcha-row{display:flex;gap:8px;align-items:stretch}
 .captcha-input{flex:1}
 .captcha-input input{width:100%}
-.captcha-img{
-  width:120px;height:40px;border:1px solid rgba(0,0,0,.1);border-radius:8px;
-  overflow:hidden;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#f5f5f5;
-}
+.captcha-img{width:120px;height:40px;border:1px solid rgba(0,0,0,.1);border-radius:8px;overflow:hidden;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#f5f5f5}
 .captcha-img :deep(svg){width:100%;height:100%}
-.captcha-refresh{
-  width:40px;height:40px;border:1px solid rgba(0,0,0,.1);border-radius:8px;
-  background:rgba(255,255,255,.7);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;
-}
+.captcha-refresh{width:40px;height:40px;border:1px solid rgba(0,0,0,.1);border-radius:8px;background:rgba(255,255,255,.7);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .captcha-refresh:hover:not(.disabled){border-color:var(--wx-green)}
 .captcha-refresh.disabled{opacity:.5;cursor:not-allowed}
 .captcha-refresh svg{width:18px;height:18px;fill:var(--wx-text-secondary)}
 .captcha-tip{font-size:12px;color:var(--wx-text-tertiary);margin-top:4px;display:block}
 .field-err{font-size:12px;color:#FA5151;margin-top:4px;display:block}
-
-/* 密码强度 */
 .pwd-strength{margin-top:8px;display:flex;align-items:center;gap:8px}
 .strength-bar{flex:1;height:4px;background:rgba(0,0,0,.06);border-radius:2px;overflow:hidden}
 .strength-fill{height:100%;border-radius:2px;transition:width .3s,background .3s}
@@ -380,16 +361,11 @@ onMounted(() => {
 .rule.ok{color:var(--wx-green)}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--wx-text-tertiary);flex-shrink:0}
 .rule.ok .dot{background:var(--wx-green)}
-
-.login-btn{
-  width:100%;padding:13px;border:none;border-radius:8px;font-size:16px;font-weight:600;
-  cursor:pointer;transition:all .15s;font-family:var(--font-body);margin-top:8px;
-}
+.login-btn{width:100%;padding:13px;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;transition:all .15s;font-family:var(--font-body);margin-top:8px}
 .login-btn-primary{background:var(--wx-green);color:#fff}
 .login-btn-primary:hover{background:var(--wx-green-dark)}
-
+.login-btn-primary:disabled{opacity:.7;cursor:not-allowed}
 .login-footer{margin-top:24px;text-align:center;display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
 .tag{padding:4px 10px;background:rgba(7,193,96,.08);color:var(--wx-green);border-radius:12px;font-size:12px}
-
 @media(max-width:480px){.login-card{padding:28px 20px}}
 </style>

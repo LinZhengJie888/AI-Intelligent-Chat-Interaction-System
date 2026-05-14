@@ -1,5 +1,8 @@
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watch } from 'vue'
+import store from '../store'
+import { MessageType } from '../api/websocket'
+import wsClient from '../api/websocket'
 
 const isPanelOpen = ref(false)
 const isDragging = ref(false)
@@ -8,10 +11,25 @@ const messagesRef = ref(null)
 const inputRef = ref(null)
 
 const messages = ref([
-  { type: 'ai', text: '你好！需要我帮忙吗？可以直接问我任何问题 😊' }
+  { type: 'ai', text: '你好！需要我帮忙吗？可以直接问我任何问题' }
 ])
 
 let startX, startY, petX, petY, moved
+
+// 监听 messagesMap 中 AI 消息的变化
+watch(() => store.messagesMap['ai:ai'], (aiMsgs) => {
+  if (!isPanelOpen.value || !aiMsgs || aiMsgs.length === 0) return
+  const lastMsg = aiMsgs[aiMsgs.length - 1]
+  if (lastMsg && lastMsg.type === 'ai') {
+    const exists = messages.value.some(m => m.type === 'ai' && m.text === lastMsg.text && m.time === lastMsg.time)
+    if (!exists) {
+      messages.value.push({ type: 'ai', text: lastMsg.text })
+      nextTick(() => {
+        if (messagesRef.value) messagesRef.value.scrollTop = messagesRef.value.scrollHeight
+      })
+    }
+  }
+}, { deep: true })
 
 function onMouseDown(e) {
   const touch = e.touches ? e.touches[0] : e
@@ -86,22 +104,21 @@ function sendMessage() {
   inputRef.value.value = ''
 
   nextTick(() => {
-    if (messagesRef.value) {
-      messagesRef.value.scrollTop = messagesRef.value.scrollHeight
-    }
+    if (messagesRef.value) messagesRef.value.scrollTop = messagesRef.value.scrollHeight
   })
 
-  setTimeout(() => {
-    messages.value.push({
-      type: 'ai',
-      text: '收到！让我想想... 你可以试试问我更具体的问题，我会给出更详细的回答。'
-    })
-    nextTick(() => {
-      if (messagesRef.value) {
-        messagesRef.value.scrollTop = messagesRef.value.scrollHeight
-      }
-    })
-  }, 800)
+  // 通过 store 发送 AI 请求
+  if (store.isLoggedIn && store.wsConnected) {
+    store.sendMessage(text, 'ai')
+  } else {
+    // 未连接时显示提示
+    setTimeout(() => {
+      messages.value.push({ type: 'ai', text: '请先登录后再与我对话' })
+      nextTick(() => {
+        if (messagesRef.value) messagesRef.value.scrollTop = messagesRef.value.scrollHeight
+      })
+    }, 500)
+  }
 }
 </script>
 
@@ -122,7 +139,7 @@ function sendMessage() {
         <span class="ai-badge">AI</span>
       </div>
       <div class="ai-pet-header-info">
-        <div class="ai-pet-header-name">AI 助手</div>
+        <div class="ai-pet-header-name">{{ store.currentAISettings.nickname || 'AI 助手' }}</div>
         <div class="ai-pet-header-status">随时为你服务</div>
       </div>
       <button class="ai-pet-close" @click.stop="isPanelOpen = false">
@@ -161,7 +178,6 @@ function sendMessage() {
 }
 .ai-pet:hover{box-shadow:0 6px 24px rgba(7,193,96,.45)}
 .ai-pet.dragging{box-shadow:0 8px 32px rgba(7,193,96,.5);transform:scale(1.08);cursor:grabbing}
-.ai-pet.hidden{display:none}
 
 .ai-pet-panel{
   position:fixed;z-index:201;
@@ -207,7 +223,6 @@ function sendMessage() {
   padding:10px 14px;border-radius:var(--wx-radius-lg);font-size:15px;line-height:1.5;
   position:relative;word-break:break-word;max-width:100%;
 }
-.msg-bubble-other{background:var(--wx-bubble-other);border:1px solid var(--wx-border)}
 .msg-bubble-mine{background:var(--wx-bubble-me)}
 .msg-bubble-ai{
   background:var(--wx-bubble-ai);border:1px solid rgba(7,193,96,.15);

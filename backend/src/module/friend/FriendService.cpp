@@ -96,7 +96,7 @@ int FriendService::sendRequest(const std::string& from_user_id, const std::strin
         return -1;  // 不能添加自己为好友
     }
     
-    // 获取数字ID
+    // 检查用户是否存在
     uint64_t from_id_num = getUserIdNum(db_, from_user_id);
     uint64_t to_id_num = getUserIdNum(db_, to_user_id);
     if (from_id_num == 0 || to_id_num == 0) {
@@ -113,8 +113,8 @@ int FriendService::sendRequest(const std::string& from_user_id, const std::strin
     char check_sql[512];
     snprintf(check_sql, sizeof(check_sql),
              "SELECT id FROM friend_request "
-             "WHERE from_user_id=%lu AND to_user_id=%lu AND status=0",
-             (unsigned long)from_id_num, (unsigned long)to_id_num);
+             "WHERE from_user_id='%s' AND to_user_id='%s' AND status=0",
+             from_user_id.c_str(), to_user_id.c_str());
     
     MYSQL_RES* check_res = db_.query(check_sql);
     if (check_res) {
@@ -131,12 +131,12 @@ int FriendService::sendRequest(const std::string& from_user_id, const std::strin
         return -4;  // 在冷却期内
     }
     
-    // 插入好友请求
+    // 插入好友请求（使用字符串user_id）
     char sql[1024];
     snprintf(sql, sizeof(sql),
              "INSERT INTO friend_request (from_user_id, to_user_id, request_msg, status, create_time) "
-             "VALUES (%lu, %lu, '%s', 0, NOW())",
-             (unsigned long)from_id_num, (unsigned long)to_id_num, request_msg.c_str());
+             "VALUES ('%s', '%s', '%s', 0, NOW())",
+             from_user_id.c_str(), to_user_id.c_str(), request_msg.c_str());
     
     if (!db_.execute(sql)) {
         std::cerr << "Failed to insert friend request" << std::endl;
@@ -200,19 +200,12 @@ bool FriendService::deleteFriend(const std::string& user_id, const std::string& 
  * @brief 检查是否是好友关系
  */
 bool FriendService::isFriend(const std::string& user_id1, const std::string& user_id2) {
-    // 获取数字ID
-    uint64_t id1_num = getUserIdNum(db_, user_id1);
-    uint64_t id2_num = getUserIdNum(db_, user_id2);
-    if (id1_num == 0 || id2_num == 0) {
-        return false;
-    }
-    
     char sql[512];
     snprintf(sql, sizeof(sql),
              "SELECT id FROM friend_relation "
-             "WHERE (user_id=%lu AND friend_id=%lu) OR (user_id=%lu AND friend_id=%lu)",
-             (unsigned long)id1_num, (unsigned long)id2_num, 
-             (unsigned long)id2_num, (unsigned long)id1_num);
+             "WHERE (user_id='%s' AND friend_id='%s') OR (user_id='%s' AND friend_id='%s')",
+             user_id1.c_str(), user_id2.c_str(), 
+             user_id2.c_str(), user_id1.c_str());
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -467,25 +460,18 @@ bool FriendService::isInCoolingPeriod(const std::string& from_user_id, const std
  * @brief 添加好友关系（双向）
  */
 bool FriendService::addFriendRelation(const std::string& user_id1, const std::string& user_id2) {
-    // 获取数字ID
-    uint64_t id1_num = getUserIdNum(db_, user_id1);
-    uint64_t id2_num = getUserIdNum(db_, user_id2);
-    if (id1_num == 0 || id2_num == 0) {
-        return false;
-    }
-    
     char sql1[512];
     char sql2[512];
     
     snprintf(sql1, sizeof(sql1),
              "INSERT INTO friend_relation (user_id, friend_id, create_time) "
-             "VALUES (%lu, %lu, NOW())",
-             (unsigned long)id1_num, (unsigned long)id2_num);
+             "VALUES ('%s', '%s', NOW())",
+             user_id1.c_str(), user_id2.c_str());
     
     snprintf(sql2, sizeof(sql2),
              "INSERT INTO friend_relation (user_id, friend_id, create_time) "
-             "VALUES (%lu, %lu, NOW())",
-             (unsigned long)id2_num, (unsigned long)id1_num);
+             "VALUES ('%s', '%s', NOW())",
+             user_id2.c_str(), user_id1.c_str());
     
     return db_.execute(sql1) && db_.execute(sql2);
 }
@@ -515,18 +501,11 @@ bool FriendService::removeFriendRelation(const std::string& user_id1, const std:
  */
 bool FriendService::updateRequestStatus(const std::string& from_user_id, const std::string& to_user_id, 
                                         int8_t status) {
-    // 获取数字ID
-    uint64_t from_id_num = getUserIdNum(db_, from_user_id);
-    uint64_t to_id_num = getUserIdNum(db_, to_user_id);
-    if (from_id_num == 0 || to_id_num == 0) {
-        return false;
-    }
-    
     char sql[512];
     snprintf(sql, sizeof(sql),
              "UPDATE friend_request SET status=%d, update_time=NOW() "
-             "WHERE from_user_id=%lu AND to_user_id=%lu AND status=0",
-             static_cast<int>(status), (unsigned long)from_id_num, (unsigned long)to_id_num);
+             "WHERE from_user_id='%s' AND to_user_id='%s' AND status=0",
+             static_cast<int>(status), from_user_id.c_str(), to_user_id.c_str());
     
     return db_.execute(sql);
 }

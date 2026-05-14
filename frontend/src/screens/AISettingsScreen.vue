@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import store from '../store'
 
 const nickname = ref('')
@@ -19,29 +19,64 @@ const priorityOptions = [
   { value: 2, label: '质量优先', desc: '深度思考，适合复杂问题' }
 ]
 
+// 根据当前聊天上下文计算 chatKey
+const chatKey = computed(() => {
+  const { type, id } = store.currentChat
+  if (type === 'ai') return 'ai:ai'
+  if (type === 'group') return `group:${id}`
+  if (type === 'single') return `single:${id}`
+  return 'ai:ai'
+})
+
+// 当前聊天名称
+const chatName = computed(() => {
+  if (store.currentChat.type === 'ai') return 'AI 助手'
+  return store.currentChat.name || '当前聊天'
+})
+
 onMounted(() => {
-  nickname.value = store.aiSettings.nickname || 'AI助手'
-  tone.value = store.aiSettings.tone ?? 0
-  priority.value = store.aiSettings.priority ?? 1
+  // 加载当前聊天的AI设置
+  const settings = store.chatAISettings[chatKey.value]
+  if (settings) {
+    nickname.value = settings.nickname || 'AI助手'
+    tone.value = settings.tone ?? 0
+    priority.value = settings.priority ?? 1
+  } else {
+    nickname.value = store.currentAISettings.nickname || 'AI助手'
+    tone.value = store.currentAISettings.tone ?? 0
+    priority.value = store.currentAISettings.priority ?? 1
+  }
 })
 
 function saveSettings() {
-  store.aiSettings = {
+  const settings = {
     nickname: nickname.value.trim() || 'AI助手',
     tone: tone.value,
     priority: priority.value
   }
-  store.switchScreen('profile')
+  store.updateChatAISettings(chatKey.value, settings)
+  // 返回上一页
+  if (store.currentChat.type === 'ai') store.switchScreen('ai-chat')
+  else if (store.currentChat.type === 'group') store.switchScreen('group-chat')
+  else if (store.currentChat.type === 'single') store.switchScreen('single-chat')
+  else store.switchScreen('profile')
+}
+
+function goBack() {
+  if (store.currentChat.type === 'ai') store.switchScreen('ai-chat')
+  else if (store.currentChat.type === 'group') store.switchScreen('group-chat')
+  else if (store.currentChat.type === 'single') store.switchScreen('single-chat')
+  else store.switchScreen('profile')
 }
 </script>
 
 <template>
   <div class="screen active">
     <div class="top-bar" style="background:var(--wx-green);color:#fff;border-bottom-color:var(--wx-green)">
-      <button class="top-bar-back" @click="store.switchScreen('profile')">
+      <button class="top-bar-back" @click="goBack">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" /></svg>
       </button>
-      <div class="top-bar-title" style="color:#fff">AI 设置</div>
+      <div class="top-bar-title" style="color:#fff">AI 设置 - {{ chatName }}</div>
       <button class="top-bar-action" @click="saveSettings">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="rgba(255,255,255,.8)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" /></svg>
       </button>
@@ -54,7 +89,7 @@ function saveSettings() {
             <input v-model="nickname" type="text" placeholder="请输入AI助手昵称" class="settings-input">
           </div>
         </div>
-        <div class="settings-hint">修改后在所有聊天中生效</div>
+        <div class="settings-hint">修改后仅在「{{ chatName }}」中生效</div>
       </div>
 
       <div class="settings-section">

@@ -258,6 +258,16 @@ void ChatService::handleMessage(spConnection conn, std::string& message) {
             user_connections_[msg.from_user_id] = conn;
             std::cout << "[ChatService] Recovered from_user_id=" << msg.from_user_id << " for fd=" << conn->fd() << std::endl;
         }
+    } else {
+        // 如果消息中有 from_user_id，确保连接映射正确
+        std::lock_guard<std::mutex> lock(conn_mutex_);
+        auto it = fd_to_user_.find(conn->fd());
+        if (it == fd_to_user_.end() || it->second != msg.from_user_id) {
+            // 注册新连接
+            fd_to_user_[conn->fd()] = msg.from_user_id;
+            user_connections_[msg.from_user_id] = conn;
+            std::cout << "[ChatService] Mapped fd=" << conn->fd() << " to user_id=" << msg.from_user_id << std::endl;
+        }
     }
     
     // 根据消息类型分发处理
@@ -357,6 +367,9 @@ void ChatService::handleMessage(spConnection conn, std::string& message) {
             break;
         case MessageType::UPLOAD_GROUP_AVATAR:
             handleUploadGroupAvatar(conn, msg);
+            break;
+        case static_cast<MessageType>(0):  // 心跳消息
+            // 心跳包，更新连接活跃时间，不返回响应
             break;
         default:
             sendResponse(conn, msg.type, -1, "Unknown message type");
@@ -850,6 +863,15 @@ void ChatService::handleGroupMessage(spConnection conn, const Message& msg) {
             question = question.substr(start);
         }
         
+        // 先保存@AI消息到数据库并广播给群成员（让其他人看到谁召唤了AI）
+        if (group_service_->sendMessage(user_id, group_id, content)) {
+            std::string notification = buildResponse(
+                static_cast<int>(MessageType::GROUP_MESSAGE), 0, "",
+                "{\"from_user_id\":\"" + user_id + "\",\"group_id\":\"" + group_id + 
+                "\",\"content\":\"" + escapeJson(content) + "\"}");
+            broadcastToGroup(group_id, notification, user_id);
+        }
+        
         // 异步处理AI请求
         ai_service_->processRequest(user_id, group_id, question, true, msg.extra);
         
@@ -976,12 +998,25 @@ void ChatService::handleChatHistory(spConnection conn, const Message& msg) {
     std::vector<ChatRecord> records;
     
     if (is_group) {
-        uint64_t group_id = strtoull(target_id.c_str(), nullptr, 10);
-        records = record_dao.findByGroup(group_id);
+        // 群聊：使用 group_id 查询（字符串格式）
+        uint64_t group_id_num = getUserIdNum(*db_, target_id);
+        if (group_id_num == 0) {
+            // 尝试直接用字符串作为 group_id 查询
+            // 群聊 ID 可能是 "G" 开头的格式
+            records = record_dao.findByGroup(0); // 暂时返回空
+        } else {
+            records = record_dao.findByGroup(group_id_num);
+        }
     } else {
-        uint64_t user1 = strtoull(user_id.c_str(), nullptr, 10);
-        uint64_t user2 = strtoull(target_id.c_str(), nullptr, 10);
-        records = record_dao.findByUserPair(user1, user2);
+        // 私聊：使用数字 ID 查询
+        uint64_t user1 = getUserIdNum(*db_, user_id);
+        uint64_t user2 = getUserIdNum(*db_, target_id);
+        if (user1 == 0 || user2 == 0) {
+            std::cerr << "ChatHistory: user not found, user_id=" << user_id 
+                      << ", target_id=" << target_id << std::endl;
+        } else {
+            records = record_dao.findByUserPair(user1, user2);
+        }
     }
     
     // 构建JSON响应
@@ -1276,7 +1311,7 @@ void ChatService::handleGroupRequestList(spConnection conn, const Message& msg) 
     std::string group_id = msg.to_user_id;
     
     // 检查是否是群主
-    if (!group_service_->isGroupCreator(group_id, user_id)) {
+    if (!group_service_->isGroupCreator(user_id, group_id)) {
         sendResponse(conn, static_cast<int>(MessageType::GROUP_REQUEST_LIST), -1, 
                     "Not group creator");
         return;
@@ -1303,7 +1338,7 @@ void ChatService::handleGroupModifyName(spConnection conn, const Message& msg) {
     }
     
     // 检查是否是群主或管理员
-    if (!group_service_->isGroupCreator(group_id, user_id)) {
+    if (!group_service_->isGroupCreator(user_id, group_id)) {
         sendResponse(conn, static_cast<int>(MessageType::GROUP_MODIFY_NAME), -1, 
                     "Not group creator");
         return;
@@ -1333,7 +1368,7 @@ void ChatService::handleGroupLeave(spConnection conn, const Message& msg) {
     std::string group_id = msg.to_user_id;
     
     // 群主不能退出群聊
-    if (group_service_->isGroupCreator(group_id, user_id)) {
+    if (group_service_->isGroupCreator(user_id, group_id)) {
         sendResponse(conn, static_cast<int>(MessageType::GROUP_LEAVE), -1, 
                     "Creator cannot leave group");
         return;
@@ -1364,7 +1399,7 @@ void ChatService::handleGroupKick(spConnection conn, const Message& msg) {
     std::string group_id = getJsonValue(msg.extra, "group_id");
     
     // 检查是否是群主
-    if (!group_service_->isGroupCreator(group_id, user_id)) {
+    if (!group_service_->isGroupCreator(user_id, group_id)) {
         sendResponse(conn, static_cast<int>(MessageType::GROUP_KICK), -1, 
                     "Not group creator");
         return;
@@ -1401,7 +1436,7 @@ void ChatService::handleGroupKick(spConnection conn, const Message& msg) {
 }
 
 /**
- * @brief 处理上传用户头像请求（简化实现）
+ * @brief 处理上传用户头像请求
  */
 void ChatService::handleUploadAvatar(spConnection conn, const Message& msg) {
     std::string user_id = msg.from_user_id;
@@ -1414,12 +1449,51 @@ void ChatService::handleUploadAvatar(spConnection conn, const Message& msg) {
         return;
     }
     
-    // 生成文件名
+    // 生成文件名和路径
     std::string filename = "avatar_" + user_id + "." + (format.empty() ? "png" : format);
     std::string filepath = "./backend/static/avatars/" + filename;
     
-    // 简化实现：直接存储Base64数据（实际项目应解码后存储）
-    // 这里仅更新数据库路径
+    // 确保目录存在
+    system("mkdir -p ./backend/static/avatars");
+    
+    // 提取 Base64 数据（去掉 "data:image/xxx;base64," 前缀）
+    std::string base64_content = avatar_data;
+    size_t comma_pos = avatar_data.find(',');
+    if (comma_pos != std::string::npos) {
+        base64_content = avatar_data.substr(comma_pos + 1);
+    }
+    
+    // 解码 Base64 并写入文件
+    // Base64 解码：每4个字符转3个字节
+    const std::string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::vector<unsigned char> decoded;
+    int val = 0, bits = -8;
+    for (char c : base64_content) {
+        if (c == '=') break;
+        size_t pos = chars.find(c);
+        if (pos == std::string::npos) continue;
+        val = (val << 6) + pos;
+        bits += 6;
+        if (bits >= 0) {
+            decoded.push_back((val >> bits) & 0xFF);
+            bits -= 8;
+        }
+    }
+    
+    // 写入文件
+    FILE* fp = fopen(filepath.c_str(), "wb");
+    if (fp) {
+        fwrite(decoded.data(), 1, decoded.size(), fp);
+        fclose(fp);
+        std::cout << "Avatar saved to " << filepath << " (" << decoded.size() << " bytes)" << std::endl;
+    } else {
+        std::cerr << "Failed to write avatar file: " << filepath << std::endl;
+        sendResponse(conn, static_cast<int>(MessageType::UPLOAD_AVATAR), -1, 
+                    "Failed to save avatar file");
+        return;
+    }
+    
+    // 更新数据库
     UserDAO user_dao(*db_);
     User* user = user_dao.findByUserId(user_id);
     if (!user) {
@@ -1451,7 +1525,7 @@ void ChatService::handleUploadGroupAvatar(spConnection conn, const Message& msg)
     std::string format = getJsonValue(msg.extra, "format");
     
     // 检查是否是群主
-    if (!group_service_->isGroupCreator(group_id, user_id)) {
+    if (!group_service_->isGroupCreator(user_id, group_id)) {
         sendResponse(conn, static_cast<int>(MessageType::UPLOAD_GROUP_AVATAR), -1, 
                     "Not group creator");
         return;
@@ -1494,17 +1568,22 @@ void ChatService::broadcastToUser(const std::string& user_id, const std::string&
  */
 void ChatService::broadcastToGroup(const std::string& group_id, const std::string& message, 
                                    const std::string& exclude_user_id) {
-    std::vector<GroupMember> members = group_service_->getGroupMembersList(group_id);
+    // 先在锁外获取所有成员的user_id字符串
+    std::vector<std::string> member_user_ids = group_service_->getGroupMemberUserIds(group_id);
     
+    // 在锁内只做发送
     std::lock_guard<std::mutex> lock(conn_mutex_);
     
-    for (const auto& member : members) {
-        std::string member_user_id = std::to_string(member.user_id);
+    for (const auto& member_user_id : member_user_ids) {
         if (member_user_id == exclude_user_id) continue;
         
         auto it = user_connections_.find(member_user_id);
         if (it != user_connections_.end()) {
-            it->second->send(message.data(), message.size());
+            try {
+                it->second->send(message.data(), message.size());
+            } catch (const std::exception& e) {
+                std::cerr << "[ChatService] Failed to send to " << member_user_id << ": " << e.what() << std::endl;
+            }
         }
     }
 }

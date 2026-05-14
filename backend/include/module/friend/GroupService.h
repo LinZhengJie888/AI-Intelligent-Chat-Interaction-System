@@ -164,11 +164,11 @@ public:
     std::vector<GroupMemberInfo> getGroupMembersStruct(const std::string& group_id);
     
     /**
-     * @brief 获取群成员列表（用于ChatService广播）
+     * @brief 获取群成员的user_id字符串列表（用于ChatService广播）
      * @param group_id 群聊ID
-     * @return 群成员列表
+     * @return 群成员user_id列表
      */
-    std::vector<GroupMember> getGroupMembersList(const std::string& group_id);
+    std::vector<std::string> getGroupMemberUserIds(const std::string& group_id);
     
     /**
      * @brief 获取用户加入的群聊列表
@@ -283,6 +283,11 @@ private:
      * @return 创建成功返回true，失败返回false
      */
     bool createGroupRecordTable();
+    
+    /**
+     * @brief 修复已有表的列类型
+     */
+    void fixTableSchemas();
     
     /**
      * @brief 生成唯一群聊ID

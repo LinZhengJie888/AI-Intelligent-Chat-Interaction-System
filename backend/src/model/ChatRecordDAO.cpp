@@ -23,6 +23,9 @@ ChatRecordDAO::ChatRecordDAO(Database& db) : db_(db) {}
 bool ChatRecordDAO::insert(ChatRecord& record) {
     char sql[4096];
     
+    // 转义content以防止SQL注入
+    std::string escaped_content = db_.escapeString(record.content);
+    
     // 处理NULL值的情况
     if (record.group_id > 0) {
         snprintf(sql, sizeof(sql),
@@ -32,7 +35,7 @@ bool ChatRecordDAO::insert(ChatRecord& record) {
                 (unsigned long)record.sender_id,
                 record.receiver_id > 0 ? (unsigned long)record.receiver_id : 0,
                 (unsigned long)record.group_id,
-                record.content.c_str(), record.msg_type,
+                escaped_content.c_str(), record.msg_type,
                 record.is_ai, record.is_recalled, record.is_read);
     } else {
         snprintf(sql, sizeof(sql),
@@ -41,7 +44,7 @@ bool ChatRecordDAO::insert(ChatRecord& record) {
                 "(%lu, %lu, NULL, '%s', %d, %d, %d, %d)",
                 (unsigned long)record.sender_id,
                 record.receiver_id > 0 ? (unsigned long)record.receiver_id : 0,
-                record.content.c_str(), record.msg_type,
+                escaped_content.c_str(), record.msg_type,
                 record.is_ai, record.is_recalled, record.is_read);
     }
     

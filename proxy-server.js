@@ -1,10 +1,64 @@
 const net = require('net');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const WebSocket = require('ws');
 
 const BACKEND_HOST = '127.0.0.1';
 const BACKEND_PORT = 8080;
 const WS_PORT = 8081;
+const HTTP_PORT = 8082;
+const STATIC_DIR = path.join(__dirname, 'backend', 'static');
 
+// ===== HTTP 静态文件服务器 =====
+const httpServer = http.createServer((req, res) => {
+  // 处理静态文件请求（头像等）
+  if (req.url.startsWith('/static/')) {
+    const filePath = path.join(STATIC_DIR, req.url.replace('/static/', ''));
+    
+    // 安全检查：防止路径遍历
+    if (!filePath.startsWith(STATIC_DIR)) {
+      res.writeHead(403);
+      res.end('Forbidden');
+      return;
+    }
+    
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.writeHead(404);
+        res.end('Not Found');
+        return;
+      }
+      
+      // 设置正确的 Content-Type
+      const ext = path.extname(filePath).toLowerCase();
+      const contentTypes = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.svg': 'image/svg+xml',
+        '.webp': 'image/webp'
+      };
+      
+      res.writeHead(200, {
+        'Content-Type': contentTypes[ext] || 'application/octet-stream',
+        'Access-Control-Allow-Origin': '*'
+      });
+      res.end(data);
+    });
+  } else {
+    res.writeHead(404);
+    res.end('Not Found');
+  }
+});
+
+httpServer.listen(HTTP_PORT, () => {
+  console.log(`HTTP static server running on http://localhost:${HTTP_PORT}`);
+  console.log(`Serving static files from: ${STATIC_DIR}`);
+});
+
+// ===== WebSocket 代理服务器 =====
 const wss = new WebSocket.Server({ port: WS_PORT });
 
 console.log(`WebSocket proxy server running on ws://localhost:${WS_PORT}`);
@@ -48,7 +102,6 @@ wss.on('connection', (ws) => {
   });
   
   ws.on('message', (message, isBinary) => {
-    // 处理Buffer或ArrayBuffer格式的消息
     let buffer;
     if (Buffer.isBuffer(message)) {
       buffer = message;
@@ -57,7 +110,6 @@ wss.on('connection', (ws) => {
     } else if (Array.isArray(message)) {
       buffer = Buffer.concat(message);
     } else {
-      // 尝试转换为Buffer
       buffer = Buffer.from(message);
     }
     

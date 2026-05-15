@@ -308,6 +308,9 @@ void ChatService::handleMessage(spConnection conn, std::string& message) {
         case MessageType::GROUP_KICK:
             handleGroupKick(conn, msg);
             break;
+        case MessageType::GROUP_DISSOLVE:
+            handleGroupDissolve(conn, msg);
+            break;
         case MessageType::UPLOAD_AVATAR:
             handleUploadAvatar(conn, msg);
             break;
@@ -672,6 +675,13 @@ void ChatService::handleFriendDelete(spConnection conn, const Message& msg) {
     if (friend_service_->deleteFriend(user_id, friend_id)) {
         sendResponse(conn, static_cast<int>(MessageType::FRIEND_DELETE), 0, 
                     "Friend deleted");
+        
+        // 通知被删除方
+        std::string notification = buildResponse(
+            static_cast<int>(MessageType::FRIEND_DELETE), 0, 
+            "You have been removed from friend list",
+            "{\"from_user_id\":\"" + user_id + "\"}");
+        broadcastToUser(friend_id, notification);
     } else {
         sendResponse(conn, static_cast<int>(MessageType::FRIEND_DELETE), -1, 
                     "Failed to delete friend");
@@ -1044,6 +1054,21 @@ void ChatService::handleAiRequest(spConnection conn, const Message& msg) {
         target_id = user_id;
     }
     
+    // 保存用户提问到数据库
+    uint64_t user_id_num = getUserIdNum(*db_, user_id);
+    if (user_id_num > 0) {
+        ChatRecord record;
+        record.sender_id = user_id_num;
+        record.receiver_id = 0;  // AI消息，receiver_id为0
+        record.group_id = 0;
+        record.content = question;
+        record.is_ai = 0;  // 用户提问不是AI回复
+        
+        ChatRecordDAO record_dao(*db_);
+        record_dao.insert(record);
+        std::cout << "[ChatService] Saved AI question from user " << user_id << std::endl;
+    }
+    
     // 创建AI请求并设置extra
     AIRequest ai_request;
     ai_request.user_id = user_id;
@@ -1367,6 +1392,30 @@ void ChatService::handleGroupLeave(spConnection conn, const Message& msg) {
     } else {
         sendResponse(conn, static_cast<int>(MessageType::GROUP_LEAVE), -1, 
                     "Failed to leave group");
+    }
+}
+
+/**
+ * @brief 处理解散群聊请求
+ */
+void ChatService::handleGroupDissolve(spConnection conn, const Message& msg) {
+    std::string user_id = msg.from_user_id;
+    std::string group_id = msg.to_user_id;
+    
+    // 先广播通知给所有群成员（在删除群聊之前）
+    std::string notification = buildResponse(
+        static_cast<int>(MessageType::GROUP_DISSOLVE), 0, 
+        "Group dissolved",
+        "{\"group_id\":\"" + group_id + "\"}");
+    broadcastToGroup(group_id, notification);
+    
+    // 解散群聊
+    if (group_service_->dissolveGroup(group_id, user_id)) {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_DISSOLVE), 0, 
+                    "Group dissolved successfully");
+    } else {
+        sendResponse(conn, static_cast<int>(MessageType::GROUP_DISSOLVE), -1, 
+                    "Failed to dissolve group");
     }
 }
 

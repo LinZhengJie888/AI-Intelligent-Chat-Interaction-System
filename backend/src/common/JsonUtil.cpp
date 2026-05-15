@@ -281,6 +281,30 @@ std::string JsonUtil::parseString(const std::string& json, size_t& pos) {
                         std::string hex = json.substr(pos + 1, 4);
                         unsigned long codepoint = std::stoul(hex, nullptr, 16);
                         
+                        // 检查是否是高代理对 (0xD800-0xDBFF)
+                        if (codepoint >= 0xD800 && codepoint <= 0xDBFF) {
+                            // 查找低代理对 \uDC00-\uDFFF
+                            if (pos + 11 < json.size() && json[pos + 5] == '\\' && json[pos + 6] == 'u') {
+                                std::string hex2 = json.substr(pos + 7, 4);
+                                unsigned long codepoint2 = std::stoul(hex2, nullptr, 16);
+                                
+                                if (codepoint2 >= 0xDC00 && codepoint2 <= 0xDFFF) {
+                                    // 解码代理对为完整的 Unicode 码点
+                                    unsigned long full_codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (codepoint2 - 0xDC00);
+                                    
+                                    // 转换为 UTF-8 (4字节)
+                                    result += static_cast<char>(0xF0 | (full_codepoint >> 18));
+                                    result += static_cast<char>(0x80 | ((full_codepoint >> 12) & 0x3F));
+                                    result += static_cast<char>(0x80 | ((full_codepoint >> 6) & 0x3F));
+                                    result += static_cast<char>(0x80 | (full_codepoint & 0x3F));
+                                    
+                                    pos += 10; // 跳过 \uXXXX\uXXXX (12个字符，但外层会+1)
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // 普通 Unicode 字符
                         if (codepoint <= 0x7F) {
                             result += static_cast<char>(codepoint);
                         } else if (codepoint <= 0x7FF) {

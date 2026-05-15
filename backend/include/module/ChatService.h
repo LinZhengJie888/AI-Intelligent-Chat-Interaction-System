@@ -70,6 +70,7 @@ enum class MessageType {
     UPDATE_USERNAME = 62,   ///< 修改用户名
     GROUP_KICK = 63,        ///< 踢出群成员
     GROUP_REQUEST_LIST = 64, ///< 获取加群请求列表
+    GROUP_DISSOLVE = 65,    ///< 解散群聊
     
     // 头像相关
     UPLOAD_AVATAR = 70,     ///< 上传用户头像
@@ -430,6 +431,13 @@ private:
      * @param msg 消息结构体
      */
     void handleGroupKick(spConnection conn, const Message& msg);
+    
+    /**
+     * @brief 处理解散群聊请求
+     * @param conn 连接对象
+     * @param msg 消息结构体
+     */
+    void handleGroupDissolve(spConnection conn, const Message& msg);
     
     /**
      * @brief 处理上传用户头像请求

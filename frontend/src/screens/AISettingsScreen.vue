@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import store from '../store'
 
 const nickname = ref('')
@@ -34,8 +34,8 @@ const chatName = computed(() => {
   return store.currentChat.name || '当前聊天'
 })
 
-onMounted(() => {
-  // 加载当前聊天的AI设置
+// 加载设置的函数
+function loadSettings() {
   const settings = store.chatAISettings[chatKey.value]
   if (settings) {
     nickname.value = settings.nickname || 'AI助手'
@@ -46,7 +46,16 @@ onMounted(() => {
     tone.value = store.currentAISettings.tone ?? 0
     priority.value = store.currentAISettings.priority ?? 1
   }
+}
+
+onMounted(() => {
+  loadSettings()
 })
+
+// 监听 chatAISettings 变化，自动更新本地设置
+watch(() => store.chatAISettings[chatKey.value], () => {
+  loadSettings()
+}, { deep: true })
 
 function saveSettings() {
   const settings = {

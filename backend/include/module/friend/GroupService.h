@@ -250,6 +250,14 @@ public:
     bool leaveGroup(const std::string& user_id, const std::string& group_id);
     
     /**
+     * @brief 解散群聊（仅群主可操作）
+     * @param group_id 群聊ID
+     * @param operator_id 操作者用户ID（群主）
+     * @return 解散成功返回true，失败返回false
+     */
+    bool dissolveGroup(const std::string& group_id, const std::string& operator_id);
+    
+    /**
      * @brief 踢出群成员
      * @param user_id 被踢用户ID
      * @param group_id 群聊ID

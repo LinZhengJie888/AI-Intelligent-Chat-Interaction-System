@@ -438,15 +438,28 @@ std::string GroupService::getGroupMembers(const std::string& group_id) {
 std::vector<GroupMemberInfo> GroupService::getGroupMembersStruct(const std::string& group_id) {
     std::vector<GroupMemberInfo> members;
     
-    // 获取群聊数值主键
-    uint64_t group_id_num = getGroupIdNum(db_, group_id);
-    if (group_id_num == 0) {
+    // 先获取群聊的数字ID
+    std::string safe_group_id = db_.escapeString(group_id);
+    char group_sql[256];
+    snprintf(group_sql, sizeof(group_sql),
+             "SELECT id FROM group_chat WHERE group_id='%s'", safe_group_id.c_str());
+    MYSQL_RES* group_res = db_.query(group_sql);
+    if (!group_res) {
         return members;
     }
+    MYSQL_ROW group_row = mysql_fetch_row(group_res);
+    if (!group_row || !group_row[0]) {
+        db_.freeResult(group_res);
+        return members;
+    }
+    uint64_t group_id_num = strtoull(group_row[0], nullptr, 10);
+    db_.freeResult(group_res);
     
+    // 使用数字ID查询群成员
+    // group_member.user_id 存储的是数字ID，通过 user.id 关联
     char sql[1024];
     snprintf(sql, sizeof(sql),
-             "SELECT gm.user_id, gm.role, gm.join_time, "
+             "SELECT u.user_id, gm.role, gm.join_time, "
              "u.username, u.nickname, u.avatar_path "
              "FROM group_member gm "
              "JOIN user u ON gm.user_id = u.id "
@@ -872,6 +885,40 @@ bool GroupService::leaveGroup(const std::string& user_id, const std::string& gro
     }
     
     return removeGroupMember(group_id, user_id);
+}
+
+/**
+ * @brief 解散群聊（仅群主可操作）
+ */
+bool GroupService::dissolveGroup(const std::string& group_id, const std::string& operator_id) {
+    // 检查操作者是否是群主
+    if (!isGroupCreator(operator_id, group_id)) {
+        std::cerr << "Only group creator can dissolve group" << std::endl;
+        return false;
+    }
+    
+    std::string safe_group_id = db_.escapeString(group_id);
+    
+    // 删除群成员记录
+    char sql1[256];
+    snprintf(sql1, sizeof(sql1), "DELETE FROM group_member WHERE group_id='%s'", safe_group_id.c_str());
+    db_.execute(sql1);
+    
+    // 删除群请求记录
+    char sql2[256];
+    snprintf(sql2, sizeof(sql2), "DELETE FROM group_request WHERE group_id='%s'", safe_group_id.c_str());
+    db_.execute(sql2);
+    
+    // 删除群聊记录
+    char sql3[256];
+    snprintf(sql3, sizeof(sql3), "DELETE FROM group_record WHERE group_id='%s'", safe_group_id.c_str());
+    db_.execute(sql3);
+    
+    // 删除群聊本身
+    char sql4[256];
+    snprintf(sql4, sizeof(sql4), "DELETE FROM group_chat WHERE group_id='%s'", safe_group_id.c_str());
+    
+    return db_.execute(sql4);
 }
 
 /**

@@ -5,6 +5,7 @@ import store from '../store'
 const messagesArea = ref(null)
 const fileInput = ref(null)
 const previewImage = ref(null)
+const showDeleteConfirm = ref(false)
 
 watch(() => store.messages.length, () => {
   nextTick(() => {
@@ -64,6 +65,15 @@ function sendImage() {
 function cancelImage() {
   previewImage.value = null
 }
+
+function confirmDeleteFriend() {
+  showDeleteConfirm.value = true
+}
+
+function deleteFriend() {
+  store.deleteFriend(store.currentChat.id)
+  showDeleteConfirm.value = false
+}
 </script>
 
 <template>
@@ -73,9 +83,14 @@ function cancelImage() {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--wx-text)"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" /></svg>
       </button>
       <div class="top-bar-title">{{ store.currentChat.name }}</div>
-      <button class="top-bar-action" @click="store.switchScreen('ai-settings')">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--wx-text-secondary)"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
-      </button>
+      <div class="top-bar-actions">
+        <button class="top-bar-action" @click="confirmDeleteFriend" title="删除好友">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="#FA5151"><path d="M15 16h4v2h-4zm0-8h7v2h-7zm0 4h6v2h-6zM3 18c0 1.1.9 2 2 2h6c1.1 0 2-.9 2-2V8H3v10zM14 5h-3.5l-1-1h-5l-1 1H0v2h14V5z" /></svg>
+        </button>
+        <button class="top-bar-action" @click="store.switchScreen('ai-settings')">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="var(--wx-text-secondary)"><circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" /></svg>
+        </button>
+      </div>
     </div>
 
     <div ref="messagesArea" class="messages-area">
@@ -140,6 +155,18 @@ function cancelImage() {
         <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
       </button>
     </div>
+
+    <!-- 删除好友确认弹窗 -->
+    <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="showDeleteConfirm=false">
+      <div class="modal-card fade-in">
+        <div class="modal-title">删除好友</div>
+        <div class="modal-desc">确定要删除好友「{{ store.currentChat.name }}」吗？删除后将从好友列表中移除。</div>
+        <div class="modal-actions">
+          <button class="modal-btn modal-btn-cancel" @click="showDeleteConfirm=false">取消</button>
+          <button class="modal-btn modal-btn-danger" @click="deleteFriend">删除</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -151,4 +178,16 @@ function cancelImage() {
 .preview-thumb{width:48px;height:48px;object-fit:cover;border-radius:6px}
 .preview-send{padding:6px 16px;background:var(--wx-green);color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer}
 .preview-cancel{padding:6px 16px;background:var(--wx-bg);color:var(--wx-text-secondary);border:1px solid var(--wx-border);border-radius:6px;font-size:13px;cursor:pointer}
+.top-bar-actions{display:flex;gap:8px;align-items:center}
+
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px}
+.modal-card{background:var(--wx-white);border-radius:16px;padding:28px 24px;width:100%;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,.15)}
+.modal-title{font-size:18px;font-weight:600;margin-bottom:12px;text-align:center}
+.modal-desc{font-size:14px;color:var(--wx-text-secondary);text-align:center;margin-bottom:20px;line-height:1.5}
+.modal-actions{display:flex;gap:12px}
+.modal-btn{flex:1;padding:11px;border:none;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;transition:all .15s}
+.modal-btn-cancel{background:var(--wx-bg);color:var(--wx-text-secondary)}
+.modal-btn-cancel:hover{background:var(--wx-border)}
+.modal-btn-danger{background:#FA5151;color:#fff}
+.modal-btn-danger:hover{background:#E04040}
 </style>

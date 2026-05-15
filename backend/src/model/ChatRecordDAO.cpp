@@ -28,24 +28,48 @@ bool ChatRecordDAO::insert(ChatRecord& record) {
     
     // 处理NULL值的情况
     if (record.group_id > 0) {
-        snprintf(sql, sizeof(sql),
-                "INSERT INTO chat_record (sender_id, receiver_id, group_id, "
-                "content, msg_type, is_ai, is_recalled, is_read) VALUES "
-                "(%lu, %lu, %lu, '%s', %d, %d, %d, %d)",
-                (unsigned long)record.sender_id,
-                record.receiver_id > 0 ? (unsigned long)record.receiver_id : 0,
-                (unsigned long)record.group_id,
-                escaped_content.c_str(), record.msg_type,
-                record.is_ai, record.is_recalled, record.is_read);
+        // 群聊消息
+        if (record.receiver_id > 0) {
+            snprintf(sql, sizeof(sql),
+                    "INSERT INTO chat_record (sender_id, receiver_id, group_id, "
+                    "content, msg_type, is_ai, is_recalled, is_read) VALUES "
+                    "(%lu, %lu, %lu, '%s', %d, %d, %d, %d)",
+                    (unsigned long)record.sender_id,
+                    (unsigned long)record.receiver_id,
+                    (unsigned long)record.group_id,
+                    escaped_content.c_str(), record.msg_type,
+                    record.is_ai, record.is_recalled, record.is_read);
+        } else {
+            snprintf(sql, sizeof(sql),
+                    "INSERT INTO chat_record (sender_id, receiver_id, group_id, "
+                    "content, msg_type, is_ai, is_recalled, is_read) VALUES "
+                    "(%lu, NULL, %lu, '%s', %d, %d, %d, %d)",
+                    (unsigned long)record.sender_id,
+                    (unsigned long)record.group_id,
+                    escaped_content.c_str(), record.msg_type,
+                    record.is_ai, record.is_recalled, record.is_read);
+        }
     } else {
-        snprintf(sql, sizeof(sql),
-                "INSERT INTO chat_record (sender_id, receiver_id, group_id, "
-                "content, msg_type, is_ai, is_recalled, is_read) VALUES "
-                "(%lu, %lu, NULL, '%s', %d, %d, %d, %d)",
-                (unsigned long)record.sender_id,
-                record.receiver_id > 0 ? (unsigned long)record.receiver_id : 0,
-                escaped_content.c_str(), record.msg_type,
-                record.is_ai, record.is_recalled, record.is_read);
+        // 私聊消息或AI消息
+        if (record.receiver_id > 0) {
+            snprintf(sql, sizeof(sql),
+                    "INSERT INTO chat_record (sender_id, receiver_id, group_id, "
+                    "content, msg_type, is_ai, is_recalled, is_read) VALUES "
+                    "(%lu, %lu, NULL, '%s', %d, %d, %d, %d)",
+                    (unsigned long)record.sender_id,
+                    (unsigned long)record.receiver_id,
+                    escaped_content.c_str(), record.msg_type,
+                    record.is_ai, record.is_recalled, record.is_read);
+        } else {
+            // AI消息或无接收者的消息，receiver_id设为NULL
+            snprintf(sql, sizeof(sql),
+                    "INSERT INTO chat_record (sender_id, receiver_id, group_id, "
+                    "content, msg_type, is_ai, is_recalled, is_read) VALUES "
+                    "(%lu, NULL, NULL, '%s', %d, %d, %d, %d)",
+                    (unsigned long)record.sender_id,
+                    escaped_content.c_str(), record.msg_type,
+                    record.is_ai, record.is_recalled, record.is_read);
+        }
     }
     
     if (!db_.execute(sql)) {
@@ -163,13 +187,24 @@ ChatRecord* ChatRecordDAO::findById(uint64_t id) {
  */
 std::vector<ChatRecord> ChatRecordDAO::findByUserPair(uint64_t user1, uint64_t user2, int limit) {
     std::vector<ChatRecord> records;
-    char sql[512];
+    char sql[1024];
+    // 查询条件：
+    // 1. user1发送给user2的消息
+    // 2. user2发送给user1的消息
+    // 3. user1发送的AI提问（receiver_id IS NULL，用于AI聊天）
+    // 4. user2发送的AI提问（receiver_id IS NULL，用于AI聊天，user2可能是AI）
     snprintf(sql, sizeof(sql),
             "SELECT * FROM chat_record WHERE "
-            "((sender_id=%lu AND receiver_id=%lu) OR (sender_id=%lu AND receiver_id=%lu)) "
+            "((sender_id=%lu AND receiver_id=%lu) "
+            "OR (sender_id=%lu AND receiver_id=%lu) "
+            "OR (sender_id=%lu AND receiver_id IS NULL) "
+            "OR (sender_id=%lu AND receiver_id IS NULL)) "
             "ORDER BY send_time DESC LIMIT %d",
             (unsigned long)user1, (unsigned long)user2,
-            (unsigned long)user2, (unsigned long)user1, limit);
+            (unsigned long)user2, (unsigned long)user1,
+            (unsigned long)user1,
+            (unsigned long)user2,
+            limit);
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) return records;

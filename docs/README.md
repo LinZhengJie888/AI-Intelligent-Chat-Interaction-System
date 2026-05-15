@@ -14,6 +14,8 @@
 - 多厂商 AI API 兼容接入
 - 微信浅色风格 UI
 
+**项目规模：** 约 15,500 行代码（C++ 11,289 行 + Vue/JS 4,089 行）
+
 ---
 
 ## 二、项目结构
@@ -37,6 +39,7 @@ AI智能聊天互动系统/
 │   │   │   ├── User.h          # 用户模型
 │   │   │   ├── UserDAO.h       # 用户数据访问
 │   │   │   ├── ChatRecordDAO.h # 聊天记录DAO
+│   │   │   ├── ChatAISettingDAO.h # AI设置DAO
 │   │   │   └── GroupChatDAO.h  # 群聊DAO
 │   │   ├── module/             # 业务模块
 │   │   │   ├── ChatService.h   # 消息路由中心
@@ -52,7 +55,8 @@ AI智能聊天互动系统/
 │   │   │   └── redis/          # Redis 客户端
 │   │   │       └── RedisClient.h
 │   │   └── common/             # 公共工具
-│   │       └── Util.h          # 工具函数（MD5等）
+│   │       ├── Util.h          # 工具函数（MD5等）
+│   │       └── JsonUtil.h      # JSON解析工具
 │   ├── src/                    # 源文件（与 include 对应）
 │   │   ├── main.cpp            # 后端入口
 │   │   ├── reactor/            # Reactor 框架实现
@@ -72,20 +76,22 @@ AI智能聊天互动系统/
 │       ├── api/
 │       │   └── websocket.js    # WebSocket 通信封装（4字节长度头+JSON）
 │       ├── store/
-│       │   └── index.js        # 全局状态管理
+│       │   └── index.js        # 全局状态管理（约1200行）
 │       ├── components/
 │       │   ├── Sidebar.vue     # 左侧导航栏
 │       │   ├── BottomNav.vue   # 底部导航栏（移动端）
-│       │   └── AIPet.vue       # AI 浮窗助手
+│       │   ├── AIPet.vue       # AI 浮窗助手
+│       │   └── ChatAISettingsModal.vue # AI设置弹窗
 │       └── screens/
 │           ├── LoginScreen.vue       # 登录/注册页
 │           ├── ChatListScreen.vue    # 聊天列表页
-│           ├── SingleChatScreen.vue  # 单聊页（支持图片发送）
-│           ├── GroupChatScreen.vue   # 群聊页
+│           ├── SingleChatScreen.vue  # 单聊页（支持图片发送、删除好友）
+│           ├── GroupChatScreen.vue   # 群聊页（支持群管理）
 │           ├── AIChatScreen.vue      # AI 对话页
 │           ├── ContactsScreen.vue    # 通讯录页（好友请求审核）
-│           ├── GroupsScreen.vue      # 群聊列表页
-│           └── ProfileScreen.vue     # 个人资料页（头像上传）
+│           ├── GroupsScreen.vue      # 群聊列表页（加群申请管理）
+│           ├── ProfileScreen.vue     # 个人资料页（头像上传）
+│           └── AISettingsScreen.vue  # AI设置页
 │
 ├── db/                         # 数据库
 │   └── mysql/
@@ -113,8 +119,8 @@ AI智能聊天互动系统/
 |------|------|
 | C++11/14 | 核心语言 |
 | 自研 Reactor 框架 | Epoll + 线程池，无第三方依赖 |
-| MySQL 5.7 | 主数据库，存储用户、消息、好友关系等 |
-| Redis 6.0 | 缓存层，缓存高频数据和验证码 |
+| MySQL 5.7+ | 主数据库，存储用户、消息、好友关系等 |
+| Redis 6.0+ | 缓存层，缓存高频数据和验证码 |
 | libcurl | HTTP 请求，用于调用 AI API |
 | OpenSSL | MD5 密码加密 |
 
@@ -195,6 +201,7 @@ AI智能聊天互动系统/
 | 请求审核 | 对方同意/拒绝，拒绝有冷却期 |
 | 好友列表 | 显示好友头像、用户名 |
 | 好友请求通知 | 实时推送好友请求 |
+| 删除好友 | 支持删除好友，对方收到通知 |
 
 ### 4.4 群聊系统
 
@@ -202,8 +209,11 @@ AI智能聊天互动系统/
 |------|------|
 | 创建群聊 | 设置群名，生成群聊ID |
 | 加群申请 | 通过群聊ID申请，群主审核 |
-| 群成员 | 显示成员头像、用户名、用户ID |
+| 群成员列表 | 显示成员头像、用户名、角色标签 |
 | 群名修改 | 群主/管理员可修改 |
+| 踢出成员 | 群主可踢出群成员 |
+| 退群 | 群成员可退出群聊 |
+| 解散群聊 | 群主可解散群聊 |
 
 ### 4.5 AI 助手
 
@@ -211,8 +221,9 @@ AI智能聊天互动系统/
 |------|------|
 | 调用方式 | 按键调用 / @AI 召唤 |
 | 回复规范 | 单条≤50字，分条发送 |
-| 个性化设置 | 昵称、语气、响应优先级 |
+| 个性化设置 | 昵称、语气、响应优先级（按聊天独立设置） |
 | 多厂商兼容 | 配置 API 地址和密钥即可切换 |
+| 聊天记录 | 用户提问和AI回复都保存到数据库 |
 
 ---
 
@@ -265,6 +276,7 @@ enum class MessageType {
     UPDATE_USERNAME = 62,   // 修改用户名
     GROUP_KICK = 63,        // 踢出群成员
     GROUP_REQUEST_LIST = 64,// 加群请求列表
+    GROUP_DISSOLVE = 65,    // 解散群聊
 
     // 头像
     UPLOAD_AVATAR = 70,     // 上传用户头像
@@ -502,10 +514,15 @@ wait
 |------|------|----------|
 | `user` | 用户表 | id, user_id, username, password, nickname, phone, avatar_path |
 | `group_chat` | 群聊表 | id, group_id, group_name, creator_id, avatar_path |
+| `group_member` | 群成员表 | id, group_id, user_id, role, join_time |
+| `group_request` | 加群请求表 | id, group_id, from_user_id, request_msg, status |
 | `chat_record` | 聊天记录 | id, sender_id, receiver_id, group_id, content, send_time, is_ai |
+| `chat_ai_settings` | AI设置表 | id, chat_key, nickname, tone, priority, updated_by |
 | `friend_request` | 好友请求 | id, from_user_id, to_user_id, request_msg, status, cooling_time |
 | `friend_relation` | 好友关系 | id, user_id, friend_id, remark, create_time |
 | `verification_code` | 验证码 | id, phone, code, expire_time, is_used |
+| `ai_cache` | AI回复缓存 | id, question, response, create_time |
+| `ai_log` | AI调用日志 | id, request_id, user_id, question, response, success, response_time |
 
 ---
 
@@ -539,6 +556,12 @@ A: 确保 `proxy-server.js` 已启动（包含 HTTP 静态服务，端口 8082�
 
 ### Q: 好友请求列表为空
 A: 确保后端已重新编译（`make clean && make`），好友请求使用字符串 user_id 存储
+
+### Q: 群聊中看不到群成员列表
+A: 确保后端已重新编译，群成员查询需要正确的 group_id 映射
+
+### Q: AI回复显示乱码
+A: 后端已修复 Unicode 代理对解码，确保重新编译后端
 
 ---
 

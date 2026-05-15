@@ -54,6 +54,7 @@ const store = reactive({
   recentChats: [],
   friendRequests: [],
   groupRequests: [],  // 群聊请求列表
+  groupMembers: [],   // 群成员列表
   messagesMap: {},  // 按 chatKey 隔离消息
   messages: [],      // 当前显示的消息（引用 messagesMap 中的数据）
 
@@ -191,6 +192,22 @@ const store = reactive({
           memberCount: g.member_count || 0,
           preview: '',
           colors: AVATAR_COLORS.slice(0, 4)
+        }))
+      }
+    })
+
+    // ===== 群成员列表响应 =====
+    wsClient.on(MessageType.GROUP_MEMBERS, (msg) => {
+      console.log('[Store] 群成员列表响应:', msg)
+      if (msg.code === 0) {
+        const list = Array.isArray(msg.data) ? msg.data : []
+        this.groupMembers = list.map(m => ({
+          userId: m.user_id || '',
+          username: m.username || m.nickname || '',
+          nickname: m.nickname || m.username || '',
+          avatarPath: fullAvatarUrl(m.avatar_path || ''),
+          role: m.role || 0,  // 0-普通成员 1-管理员 2-群主
+          color: getColorForId(m.user_id)
         }))
       }
     })
@@ -470,6 +487,100 @@ const store = reactive({
           avatarPath: fullAvatarUrl(r.from_avatar || r.avatar_path || ''),
           color: getColorForId(r.from_user_id)
         }))
+      }
+    })
+
+    // ===== 删除好友响应 =====
+    wsClient.on(MessageType.FRIEND_DELETE, (msg) => {
+      console.log('[Store] 删除好友响应:', msg)
+      if (msg.code === 0) {
+        // 发起方：从好友列表移除
+        if (msg.data && msg.data.from_user_id) {
+          this.friends = this.friends.filter(f => f.userId !== msg.data.from_user_id)
+        }
+        this.successMessage = '好友已删除'
+        this.errorMessage = ''
+        // 如果当前在与该好友的聊天中，跳转到聊天列表
+        if (this.currentChat.type === 'single' && this.currentChat.id === (msg.data?.from_user_id || '')) {
+          this.switchScreen('chatlist')
+        }
+      } else {
+        // 被删除方收到通知
+        if (msg.data && msg.data.from_user_id) {
+          this.friends = this.friends.filter(f => f.userId !== msg.data.from_user_id)
+          this.successMessage = msg.msg || '你已被对方删除好友'
+        } else {
+          this.errorMessage = msg.msg || '删除好友失败'
+        }
+      }
+    })
+
+    // ===== 踢出群成员响应 =====
+    wsClient.on(MessageType.GROUP_KICK, (msg) => {
+      console.log('[Store] 踢出群成员响应:', msg)
+      if (msg.code === 0) {
+        const data = msg.data || {}
+        // 被踢者收到通知
+        if (data.user_id === this.currentUser.userId) {
+          this.groups = this.groups.filter(g => g.groupId !== data.group_id)
+          this.successMessage = '你已被移出群聊'
+          if (this.currentChat.type === 'group' && this.currentChat.id === data.group_id) {
+            this.switchScreen('chatlist')
+          }
+        } else {
+          // 其他成员收到通知
+          this.successMessage = msg.msg || '成员已被移出'
+        }
+        this.errorMessage = ''
+      } else {
+        this.errorMessage = msg.msg || '踢出成员失败'
+      }
+    })
+
+    // ===== 退出群聊响应 =====
+    wsClient.on(MessageType.GROUP_LEAVE, (msg) => {
+      console.log('[Store] 退出群聊响应:', msg)
+      if (msg.code === 0) {
+        const data = msg.data || {}
+        // 退群者收到成功响应
+        if (!data.user_id || data.user_id === this.currentUser.userId) {
+          this.groups = this.groups.filter(g => g.groupId !== data.group_id)
+          this.successMessage = '已退出群聊'
+          if (this.currentChat.type === 'group' && this.currentChat.id === data.group_id) {
+            this.switchScreen('chatlist')
+          }
+        } else {
+          // 其他成员收到通知
+          this.successMessage = msg.msg || '成员已退出群聊'
+        }
+        this.errorMessage = ''
+      } else {
+        this.errorMessage = msg.msg || '退出群聊失败'
+      }
+    })
+
+    // ===== 解散群聊响应 =====
+    wsClient.on(MessageType.GROUP_DISSOLVE, (msg) => {
+      console.log('[Store] 解散群聊响应:', msg)
+      if (msg.code === 0) {
+        const data = msg.data || {}
+        this.groups = this.groups.filter(g => g.groupId !== data.group_id)
+        this.successMessage = '群聊已解散'
+        this.errorMessage = ''
+        if (this.currentChat.type === 'group' && this.currentChat.id === data.group_id) {
+          this.switchScreen('chatlist')
+        }
+      } else {
+        // 其他成员收到通知
+        if (msg.data && msg.data.group_id) {
+          this.groups = this.groups.filter(g => g.groupId !== msg.data.group_id)
+          this.successMessage = msg.msg || '群聊已解散'
+          if (this.currentChat.type === 'group' && this.currentChat.id === msg.data.group_id) {
+            this.switchScreen('chatlist')
+          }
+        } else {
+          this.errorMessage = msg.msg || '解散群聊失败'
+        }
       }
     })
 
@@ -869,6 +980,19 @@ const store = reactive({
     })
   },
 
+  deleteFriend(friendId) {
+    this.errorMessage = ''
+    this.successMessage = ''
+    wsClient.send({
+      type: MessageType.FRIEND_DELETE,
+      from_user_id: this.currentUser.userId,
+      to_user_id: friendId,
+      content: '',
+      extra: '',
+      timestamp: String(Date.now())
+    })
+  },
+
   // ==================== 群聊操作 ====================
 
   createGroup(groupName) {
@@ -924,6 +1048,56 @@ const store = reactive({
       type: MessageType.GROUP_REQUEST_LIST,
       from_user_id: this.currentUser.userId,
       to_user_id: groupId || '',
+      content: '',
+      extra: '',
+      timestamp: String(Date.now())
+    })
+  },
+
+  loadGroupMembers(groupId) {
+    wsClient.send({
+      type: MessageType.GROUP_MEMBERS,
+      from_user_id: this.currentUser.userId,
+      to_user_id: groupId,
+      content: '',
+      extra: '',
+      timestamp: String(Date.now())
+    })
+  },
+
+  kickMember(groupId, userId) {
+    this.errorMessage = ''
+    this.successMessage = ''
+    wsClient.send({
+      type: MessageType.GROUP_KICK,
+      from_user_id: this.currentUser.userId,
+      to_user_id: userId,
+      content: '',
+      extra: JSON.stringify({ group_id: groupId }),
+      timestamp: String(Date.now())
+    })
+  },
+
+  leaveGroup(groupId) {
+    this.errorMessage = ''
+    this.successMessage = ''
+    wsClient.send({
+      type: MessageType.GROUP_LEAVE,
+      from_user_id: this.currentUser.userId,
+      to_user_id: groupId,
+      content: '',
+      extra: '',
+      timestamp: String(Date.now())
+    })
+  },
+
+  dissolveGroup(groupId) {
+    this.errorMessage = ''
+    this.successMessage = ''
+    wsClient.send({
+      type: MessageType.GROUP_DISSOLVE,
+      from_user_id: this.currentUser.userId,
+      to_user_id: groupId,
       content: '',
       extra: '',
       timestamp: String(Date.now())

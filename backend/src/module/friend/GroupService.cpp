@@ -56,8 +56,34 @@ static std::string escapeSql(const std::string& str) {
  * @return 用户数字ID，失败返回0
  */
 static uint64_t getUserIdNum(Database& db, const std::string& user_id) {
+    std::string safe_user_id = db.escapeString(user_id);
     char sql[256];
-    snprintf(sql, sizeof(sql), "SELECT id FROM user WHERE user_id='%s'", user_id.c_str());
+    snprintf(sql, sizeof(sql), "SELECT id FROM user WHERE user_id='%s'", safe_user_id.c_str());
+    
+    MYSQL_RES* res = db.query(sql);
+    if (!res) return 0;
+    
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row || !row[0]) {
+        db.freeResult(res);
+        return 0;
+    }
+    
+    uint64_t id = strtoull(row[0], nullptr, 10);
+    db.freeResult(res);
+    return id;
+}
+
+/**
+ * @brief 根据群聊业务ID字符串获取数字主键ID
+ * @param db 数据库连接
+ * @param group_id 群聊业务ID字符串
+ * @return 群聊数字主键ID，失败返回0
+ */
+static uint64_t getGroupIdNum(Database& db, const std::string& group_id) {
+    std::string safe_group_id = db.escapeString(group_id);
+    char sql[256];
+    snprintf(sql, sizeof(sql), "SELECT id FROM group_chat WHERE group_id='%s'", safe_group_id.c_str());
     
     MYSQL_RES* res = db.query(sql);
     if (!res) return 0;
@@ -121,7 +147,7 @@ bool GroupService::init() {
  */
 bool GroupService::createGroup(const std::string& creator_id, const std::string& group_name, 
                                std::string& group_id) {
-    // 验证创建者存在
+    // 验证创建者存在（获取数值主键）
     uint64_t creator_id_num = getUserIdNum(db_, creator_id);
     if (creator_id_num == 0) {
         std::cerr << "Creator not found" << std::endl;
@@ -130,25 +156,31 @@ bool GroupService::createGroup(const std::string& creator_id, const std::string&
     
     group_id = generateGroupId();
     
-    std::string safe_name = escapeSql(group_name);
-    std::string safe_creator_id = escapeSql(creator_id);
+    std::string safe_name = db_.escapeString(group_name);
     char sql[1024];
     snprintf(sql, sizeof(sql),
              "INSERT INTO group_chat (group_id, group_name, creator_id, create_time) "
-             "VALUES ('%s', '%s', '%s', NOW())",
-             group_id.c_str(), safe_name.c_str(), safe_creator_id.c_str());
+             "VALUES ('%s', '%s', %lu, NOW())",
+             group_id.c_str(), safe_name.c_str(), (unsigned long)creator_id_num);
     
     if (!db_.execute(sql)) {
         std::cerr << "Failed to create group" << std::endl;
         return false;
     }
     
-    // 将创建者添加为群主（使用字符串user_id，与系统其他部分一致）
+    // 获取新插入群聊的数值主键ID
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        std::cerr << "Failed to get group numeric ID" << std::endl;
+        return false;
+    }
+    
+    // 将创建者添加为群主（使用数值主键）
     char member_sql[512];
     snprintf(member_sql, sizeof(member_sql),
              "INSERT INTO group_member (group_id, user_id, role, join_time) "
-             "VALUES ('%s', '%s', 2, NOW())",
-             group_id.c_str(), safe_creator_id.c_str());
+             "VALUES (%lu, %lu, 2, NOW())",
+             (unsigned long)group_id_num, (unsigned long)creator_id_num);
     
     if (!db_.execute(member_sql)) {
         std::cerr << "Failed to add creator as group member" << std::endl;
@@ -164,17 +196,31 @@ bool GroupService::createGroup(const std::string& creator_id, const std::string&
  */
 int GroupService::sendJoinRequest(const std::string& user_id, const std::string& group_id, 
                                   const std::string& request_msg) {
+    // 获取用户数值主键
+    uint64_t user_id_num = getUserIdNum(db_, user_id);
+    if (user_id_num == 0) {
+        std::cerr << "User not found: " << user_id << std::endl;
+        return -1;
+    }
+    
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        std::cerr << "Group not found: " << group_id << std::endl;
+        return -1;
+    }
+    
     // 检查是否已是群成员
     if (isGroupMember(user_id, group_id)) {
         return -2;  // 已是成员
     }
     
-    // 检查申请是否已存在
+    // 检查申请是否已存在（使用数值主键）
     char check_sql[512];
     snprintf(check_sql, sizeof(check_sql),
              "SELECT id FROM group_request "
-             "WHERE from_user_id='%s' AND group_id='%s' AND status=0",
-             user_id.c_str(), group_id.c_str());
+             "WHERE from_user_id=%lu AND group_id=%lu AND status=0",
+             (unsigned long)user_id_num, (unsigned long)group_id_num);
     
     MYSQL_RES* check_res = db_.query(check_sql);
     if (check_res) {
@@ -186,13 +232,13 @@ int GroupService::sendJoinRequest(const std::string& user_id, const std::string&
         db_.freeResult(check_res);
     }
     
-    // 插入加群申请
-    std::string safe_msg = escapeSql(request_msg);
+    // 插入加群申请（使用数值主键）
+    std::string safe_msg = db_.escapeString(request_msg);
     char sql[1024];
     snprintf(sql, sizeof(sql),
              "INSERT INTO group_request (group_id, from_user_id, request_msg, status, create_time) "
-             "VALUES ('%s', '%s', '%s', 0, NOW())",
-             group_id.c_str(), user_id.c_str(), safe_msg.c_str());
+             "VALUES (%lu, %lu, '%s', 0, NOW())",
+             (unsigned long)group_id_num, (unsigned long)user_id_num, safe_msg.c_str());
     
     if (!db_.execute(sql)) {
         std::cerr << "Failed to insert group request" << std::endl;
@@ -267,25 +313,14 @@ bool GroupService::sendMessage(const std::string& sender_id, const std::string& 
     }
     
     // 获取群聊数字ID
-    char group_sql[256];
-    snprintf(group_sql, sizeof(group_sql), 
-             "SELECT id FROM group_chat WHERE group_id='%s'", group_id.c_str());
-    MYSQL_RES* res = db_.query(group_sql);
-    if (!res) {
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
         std::cerr << "Group not found: " << group_id << std::endl;
         return false;
     }
-    MYSQL_ROW row = mysql_fetch_row(res);
-    if (!row || !row[0]) {
-        db_.freeResult(res);
-        std::cerr << "Group not found: " << group_id << std::endl;
-        return false;
-    }
-    uint64_t group_id_num = strtoull(row[0], nullptr, 10);
-    db_.freeResult(res);
     
     // 保存消息到聊天记录表（使用数字ID）
-    std::string safe_content = escapeSql(content);
+    std::string safe_content = db_.escapeString(content);
     char sql[4096];
     snprintf(sql, sizeof(sql),
              "INSERT INTO chat_record (sender_id, group_id, content, send_time, is_ai) "
@@ -327,11 +362,12 @@ GroupInfo GroupService::getGroupInfoStruct(const std::string& group_id) {
     info.group_id = group_id;
     info.member_count = 0;
     
+    std::string safe_group_id = db_.escapeString(group_id);
     char sql[512];
     snprintf(sql, sizeof(sql),
              "SELECT group_id, group_name, creator_id, avatar_path, announcement, create_time "
              "FROM group_chat WHERE group_id='%s'",
-             group_id.c_str());
+             safe_group_id.c_str());
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -350,11 +386,16 @@ GroupInfo GroupService::getGroupInfoStruct(const std::string& group_id) {
     
     db_.freeResult(res);
     
-    // 获取成员数量
+    // 获取成员数量（使用数值主键）
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        return info;
+    }
+    
     char count_sql[256];
     snprintf(count_sql, sizeof(count_sql),
-             "SELECT COUNT(*) FROM group_member WHERE group_id='%s'",
-             group_id.c_str());
+             "SELECT COUNT(*) FROM group_member WHERE group_id=%lu",
+             (unsigned long)group_id_num);
     
     MYSQL_RES* count_res = db_.query(count_sql);
     if (count_res) {
@@ -397,15 +438,21 @@ std::string GroupService::getGroupMembers(const std::string& group_id) {
 std::vector<GroupMemberInfo> GroupService::getGroupMembersStruct(const std::string& group_id) {
     std::vector<GroupMemberInfo> members;
     
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        return members;
+    }
+    
     char sql[1024];
     snprintf(sql, sizeof(sql),
              "SELECT gm.user_id, gm.role, gm.join_time, "
              "u.username, u.nickname, u.avatar_path "
              "FROM group_member gm "
-             "JOIN user u ON gm.user_id = u.user_id "
-             "WHERE gm.group_id='%s' "
+             "JOIN user u ON gm.user_id = u.id "
+             "WHERE gm.group_id=%lu "
              "ORDER BY gm.role DESC, gm.join_time ASC",
-             group_id.c_str());
+             (unsigned long)group_id_num);
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -434,13 +481,19 @@ std::vector<GroupMemberInfo> GroupService::getGroupMembersStruct(const std::stri
 std::vector<std::string> GroupService::getGroupMemberUserIds(const std::string& group_id) {
     std::vector<std::string> user_ids;
     
-    // 直接使用字符串group_id查询，JOIN获取user_id字符串
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        return user_ids;
+    }
+    
+    // 使用数值主键查询，JOIN获取user_id字符串
     char sql[1024];
     snprintf(sql, sizeof(sql),
              "SELECT u.user_id FROM group_member gm "
-             "JOIN user u ON gm.user_id = u.user_id "
-             "WHERE gm.group_id='%s'",
-             group_id.c_str());
+             "JOIN user u ON gm.user_id = u.id "
+             "WHERE gm.group_id=%lu",
+             (unsigned long)group_id_num);
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -486,18 +539,21 @@ std::string GroupService::getUserGroups(const std::string& user_id) {
 std::vector<GroupInfo> GroupService::getUserGroupsStruct(const std::string& user_id) {
     std::vector<GroupInfo> groups;
     
-    // 使用字符串 user_id 直接查询
-    std::string safe_user_id = escapeSql(user_id);
+    // 获取用户数值主键
+    uint64_t user_id_num = getUserIdNum(db_, user_id);
+    if (user_id_num == 0) {
+        return groups;
+    }
     
     char sql[1024];
     snprintf(sql, sizeof(sql),
              "SELECT gc.group_id, gc.group_name, gc.creator_id, gc.avatar_path, "
              "gc.announcement, gc.create_time "
              "FROM group_chat gc "
-             "JOIN group_member gm ON gc.group_id = gm.group_id "
-             "WHERE gm.user_id='%s' "
+             "JOIN group_member gm ON gc.id = gm.group_id "
+             "WHERE gm.user_id=%lu "
              "ORDER BY gc.create_time DESC",
-             safe_user_id.c_str());
+             (unsigned long)user_id_num);
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -515,19 +571,22 @@ std::vector<GroupInfo> GroupService::getUserGroupsStruct(const std::string& user
         info.create_time = row[5] ? row[5] : "";
         info.member_count = 0;
         
-        // 获取成员数量
-        char count_sql[256];
-        snprintf(count_sql, sizeof(count_sql),
-                 "SELECT COUNT(*) FROM group_member WHERE group_id='%s'",
-                 info.group_id.c_str());
-        
-        MYSQL_RES* count_res = db_.query(count_sql);
-        if (count_res) {
-            MYSQL_ROW count_row = mysql_fetch_row(count_res);
-            if (count_row && count_row[0]) {
-                info.member_count = atoi(count_row[0]);
+        // 获取成员数量（使用数值主键）
+        uint64_t group_id_num = getGroupIdNum(db_, info.group_id);
+        if (group_id_num > 0) {
+            char count_sql[256];
+            snprintf(count_sql, sizeof(count_sql),
+                     "SELECT COUNT(*) FROM group_member WHERE group_id=%lu",
+                     (unsigned long)group_id_num);
+            
+            MYSQL_RES* count_res = db_.query(count_sql);
+            if (count_res) {
+                MYSQL_ROW count_row = mysql_fetch_row(count_res);
+                if (count_row && count_row[0]) {
+                    info.member_count = atoi(count_row[0]);
+                }
+                db_.freeResult(count_res);
             }
-            db_.freeResult(count_res);
         }
         
         groups.push_back(info);
@@ -569,16 +628,22 @@ std::string GroupService::getPendingRequests(const std::string& group_id) {
 std::vector<GroupRequestInfo> GroupService::getPendingRequestsStruct(const std::string& group_id) {
     std::vector<GroupRequestInfo> requests;
     
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        return requests;
+    }
+    
     char sql[1024];
     snprintf(sql, sizeof(sql),
-             "SELECT gr.id, gr.group_id, gr.from_user_id, gr.request_msg, "
+             "SELECT gr.id, gc.group_id, u.user_id, gr.request_msg, "
              "gr.status, gr.create_time, gc.group_name, u.username, u.avatar_path "
              "FROM group_request gr "
-             "JOIN group_chat gc ON gr.group_id = gc.group_id "
-             "JOIN user u ON gr.from_user_id = u.user_id "
-             "WHERE gr.group_id='%s' AND gr.status=0 "
+             "JOIN group_chat gc ON gr.group_id = gc.id "
+             "JOIN user u ON gr.from_user_id = u.id "
+             "WHERE gr.group_id=%lu AND gr.status=0 "
              "ORDER BY gr.create_time DESC",
-             group_id.c_str());
+             (unsigned long)group_id_num);
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -608,10 +673,11 @@ std::vector<GroupRequestInfo> GroupService::getPendingRequestsStruct(const std::
  * @brief 获取群聊创建者
  */
 std::string GroupService::getGroupCreator(const std::string& group_id) {
+    std::string safe_group_id = db_.escapeString(group_id);
     char sql[256];
     snprintf(sql, sizeof(sql),
              "SELECT creator_id FROM group_chat WHERE group_id='%s'",
-             group_id.c_str());
+             safe_group_id.c_str());
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -632,13 +698,22 @@ std::string GroupService::getGroupCreator(const std::string& group_id) {
  * @brief 检查用户是否是群成员
  */
 bool GroupService::isGroupMember(const std::string& user_id, const std::string& group_id) {
-    std::string safe_user_id = escapeSql(user_id);
-    std::string safe_group_id = escapeSql(group_id);
+    // 获取用户数值主键
+    uint64_t user_id_num = getUserIdNum(db_, user_id);
+    if (user_id_num == 0) {
+        return false;
+    }
+    
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        return false;
+    }
     
     char sql[512];
     snprintf(sql, sizeof(sql),
-             "SELECT id FROM group_member WHERE user_id='%s' AND group_id='%s'",
-             safe_user_id.c_str(), safe_group_id.c_str());
+             "SELECT id FROM group_member WHERE user_id=%lu AND group_id=%lu",
+             (unsigned long)user_id_num, (unsigned long)group_id_num);
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -656,13 +731,17 @@ bool GroupService::isGroupMember(const std::string& user_id, const std::string& 
  * @brief 检查用户是否是群主
  */
 bool GroupService::isGroupCreator(const std::string& user_id, const std::string& group_id) {
-    std::string safe_user_id = escapeSql(user_id);
-    std::string safe_group_id = escapeSql(group_id);
+    // 获取用户数值主键
+    uint64_t user_id_num = getUserIdNum(db_, user_id);
+    if (user_id_num == 0) {
+        return false;
+    }
     
+    std::string safe_group_id = db_.escapeString(group_id);
     char sql[512];
     snprintf(sql, sizeof(sql),
-             "SELECT id FROM group_chat WHERE group_id='%s' AND creator_id='%s'",
-             safe_group_id.c_str(), safe_user_id.c_str());
+             "SELECT id FROM group_chat WHERE group_id='%s' AND creator_id=%lu",
+             safe_group_id.c_str(), (unsigned long)user_id_num);
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -681,11 +760,23 @@ bool GroupService::isGroupCreator(const std::string& user_id, const std::string&
  */
 bool GroupService::modifyGroupName(const std::string& group_id, const std::string& new_name, 
                                    const std::string& operator_id) {
-    // 检查操作者是否是群主或管理员
+    // 获取操作者数值主键
+    uint64_t operator_id_num = getUserIdNum(db_, operator_id);
+    if (operator_id_num == 0) {
+        return false;
+    }
+    
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        return false;
+    }
+    
+    // 检查操作者是否是群主或管理员（使用数值主键）
     char check_sql[512];
     snprintf(check_sql, sizeof(check_sql),
-             "SELECT role FROM group_member WHERE user_id='%s' AND group_id='%s'",
-             operator_id.c_str(), group_id.c_str());
+             "SELECT role FROM group_member WHERE user_id=%lu AND group_id=%lu",
+             (unsigned long)operator_id_num, (unsigned long)group_id_num);
     
     MYSQL_RES* check_res = db_.query(check_sql);
     if (!check_res) {
@@ -707,11 +798,12 @@ bool GroupService::modifyGroupName(const std::string& group_id, const std::strin
         return false;
     }
     
-    std::string safe_name = escapeSql(new_name);
+    std::string safe_name = db_.escapeString(new_name);
+    std::string safe_group_id = db_.escapeString(group_id);
     char sql[512];
     snprintf(sql, sizeof(sql),
              "UPDATE group_chat SET group_name='%s', update_time=NOW() WHERE group_id='%s'",
-             safe_name.c_str(), group_id.c_str());
+             safe_name.c_str(), safe_group_id.c_str());
     
     return db_.execute(sql);
 }
@@ -721,11 +813,23 @@ bool GroupService::modifyGroupName(const std::string& group_id, const std::strin
  */
 bool GroupService::modifyGroupAvatar(const std::string& group_id, const std::string& avatar_path, 
                                      const std::string& operator_id) {
-    // 检查操作者是否是群主或管理员
+    // 获取操作者数值主键
+    uint64_t operator_id_num = getUserIdNum(db_, operator_id);
+    if (operator_id_num == 0) {
+        return false;
+    }
+    
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        return false;
+    }
+    
+    // 检查操作者是否是群主或管理员（使用数值主键）
     char check_sql[512];
     snprintf(check_sql, sizeof(check_sql),
-             "SELECT role FROM group_member WHERE user_id='%s' AND group_id='%s'",
-             operator_id.c_str(), group_id.c_str());
+             "SELECT role FROM group_member WHERE user_id=%lu AND group_id=%lu",
+             (unsigned long)operator_id_num, (unsigned long)group_id_num);
     
     MYSQL_RES* check_res = db_.query(check_sql);
     if (!check_res) {
@@ -747,11 +851,12 @@ bool GroupService::modifyGroupAvatar(const std::string& group_id, const std::str
         return false;
     }
     
-    std::string safe_avatar = escapeSql(avatar_path);
+    std::string safe_avatar = db_.escapeString(avatar_path);
+    std::string safe_group_id = db_.escapeString(group_id);
     char sql[512];
     snprintf(sql, sizeof(sql),
              "UPDATE group_chat SET avatar_path='%s', update_time=NOW() WHERE group_id='%s'",
-             safe_avatar.c_str(), group_id.c_str());
+             safe_avatar.c_str(), safe_group_id.c_str());
     
     return db_.execute(sql);
 }
@@ -774,11 +879,29 @@ bool GroupService::leaveGroup(const std::string& user_id, const std::string& gro
  */
 bool GroupService::kickMember(const std::string& user_id, const std::string& group_id, 
                               const std::string& operator_id) {
-    // 检查操作者权限
+    // 获取操作者数值主键
+    uint64_t operator_id_num = getUserIdNum(db_, operator_id);
+    if (operator_id_num == 0) {
+        return false;
+    }
+    
+    // 获取被踢者数值主键
+    uint64_t user_id_num = getUserIdNum(db_, user_id);
+    if (user_id_num == 0) {
+        return false;
+    }
+    
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        return false;
+    }
+    
+    // 检查操作者权限（使用数值主键）
     char check_sql[512];
     snprintf(check_sql, sizeof(check_sql),
-             "SELECT role FROM group_member WHERE user_id='%s' AND group_id='%s'",
-             operator_id.c_str(), group_id.c_str());
+             "SELECT role FROM group_member WHERE user_id=%lu AND group_id=%lu",
+             (unsigned long)operator_id_num, (unsigned long)group_id_num);
     
     MYSQL_RES* check_res = db_.query(check_sql);
     if (!check_res) {
@@ -794,11 +917,11 @@ bool GroupService::kickMember(const std::string& user_id, const std::string& gro
     int operator_role = atoi(check_row[0]);
     db_.freeResult(check_res);
     
-    // 检查被踢者角色
+    // 检查被踢者角色（使用数值主键）
     char target_sql[512];
     snprintf(target_sql, sizeof(target_sql),
-             "SELECT role FROM group_member WHERE user_id='%s' AND group_id='%s'",
-             user_id.c_str(), group_id.c_str());
+             "SELECT role FROM group_member WHERE user_id=%lu AND group_id=%lu",
+             (unsigned long)user_id_num, (unsigned long)group_id_num);
     
     MYSQL_RES* target_res = db_.query(target_sql);
     if (!target_res) {
@@ -906,47 +1029,29 @@ bool GroupService::createGroupRecordTable() {
 
 /**
  * @brief 修复已有表的列类型（仅在需要时执行）
+ * @note 已禁用危险的删表重建逻辑，只保留表存在性检查
  */
 void GroupService::fixTableSchemas() {
-    // 检查 group_chat 表是否存在且 creator_id 列类型是否正确
-    MYSQL_RES* res = db_.query("SELECT COLUMN_TYPE FROM information_schema.COLUMNS "
-                               "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='group_chat' AND COLUMN_NAME='creator_id'");
+    // 检查 group_chat 表是否存在
+    MYSQL_RES* res = db_.query("SELECT COUNT(*) FROM information_schema.TABLES "
+                               "WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='group_chat'");
     if (res) {
         MYSQL_ROW row = mysql_fetch_row(res);
-        if (row && row[0]) {
-            std::string col_type = row[0];
+        if (row && row[0] && std::string(row[0]) == "0") {
             db_.freeResult(res);
-            // 如果已经是 VARCHAR，不需要修复
-            if (col_type.find("varchar") != std::string::npos || col_type.find("VARCHAR") != std::string::npos) {
-                std::cout << "Group tables schema is correct, skipping fix" << std::endl;
-                return;
-            }
-        } else {
-            db_.freeResult(res);
+            // 表不存在，创建表
+            std::cout << "Group tables not found, creating..." << std::endl;
+            createGroupChatTable();
+            createGroupMemberTable();
+            createGroupRequestTable();
+            createGroupRecordTable();
+            std::cout << "Group tables created" << std::endl;
+            return;
         }
+        db_.freeResult(res);
     }
     
-    std::cout << "Fixing group table schemas..." << std::endl;
-    
-    // 先修改 chat_record 表的 group_id 列类型（在删除外键之前）
-    db_.execute("ALTER TABLE chat_record MODIFY COLUMN group_id VARCHAR(32) DEFAULT NULL");
-    
-    // 删除引用 group_chat 的外键约束
-    db_.execute("ALTER TABLE chat_record DROP FOREIGN KEY fk_chat_record_group");
-    
-    // 删除群聊相关表
-    db_.execute("DROP TABLE IF EXISTS group_request");
-    db_.execute("DROP TABLE IF EXISTS group_member");
-    db_.execute("DROP TABLE IF EXISTS group_record");
-    db_.execute("DROP TABLE IF EXISTS group_chat");
-    
-    // 重新创建表
-    createGroupChatTable();
-    createGroupMemberTable();
-    createGroupRequestTable();
-    createGroupRecordTable();
-    
-    std::cout << "Group tables recreated with correct schemas" << std::endl;
+    std::cout << "Group tables schema check passed" << std::endl;
 }
 
 /**
@@ -960,15 +1065,25 @@ std::string GroupService::generateGroupId() {
  * @brief 添加群成员
  */
 bool GroupService::addGroupMember(const std::string& group_id, const std::string& user_id, int8_t role) {
-    // 使用escapeSql防止SQL注入
-    std::string safe_group_id = escapeSql(group_id);
-    std::string safe_user_id = escapeSql(user_id);
+    // 获取用户数值主键
+    uint64_t user_id_num = getUserIdNum(db_, user_id);
+    if (user_id_num == 0) {
+        std::cerr << "User not found: " << user_id << std::endl;
+        return false;
+    }
+    
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        std::cerr << "Group not found: " << group_id << std::endl;
+        return false;
+    }
     
     char sql[512];
     snprintf(sql, sizeof(sql),
              "INSERT INTO group_member (group_id, user_id, role, join_time) "
-             "VALUES ('%s', '%s', %d, NOW())",
-             safe_group_id.c_str(), safe_user_id.c_str(), static_cast<int>(role));
+             "VALUES (%lu, %lu, %d, NOW())",
+             (unsigned long)group_id_num, (unsigned long)user_id_num, static_cast<int>(role));
     
     return db_.execute(sql);
 }
@@ -977,14 +1092,24 @@ bool GroupService::addGroupMember(const std::string& group_id, const std::string
  * @brief 移除群成员
  */
 bool GroupService::removeGroupMember(const std::string& group_id, const std::string& user_id) {
-    // 使用escapeSql防止SQL注入
-    std::string safe_group_id = escapeSql(group_id);
-    std::string safe_user_id = escapeSql(user_id);
+    // 获取用户数值主键
+    uint64_t user_id_num = getUserIdNum(db_, user_id);
+    if (user_id_num == 0) {
+        std::cerr << "User not found: " << user_id << std::endl;
+        return false;
+    }
+    
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        std::cerr << "Group not found: " << group_id << std::endl;
+        return false;
+    }
     
     char sql[512];
     snprintf(sql, sizeof(sql),
-             "DELETE FROM group_member WHERE group_id='%s' AND user_id='%s'",
-             safe_group_id.c_str(), safe_user_id.c_str());
+             "DELETE FROM group_member WHERE group_id=%lu AND user_id=%lu",
+             (unsigned long)group_id_num, (unsigned long)user_id_num);
     
     return db_.execute(sql);
 }
@@ -994,15 +1119,25 @@ bool GroupService::removeGroupMember(const std::string& group_id, const std::str
  */
 bool GroupService::updateRequestStatus(const std::string& user_id, const std::string& group_id, 
                                         int8_t status) {
-    // 使用escapeSql防止SQL注入
-    std::string safe_user_id = escapeSql(user_id);
-    std::string safe_group_id = escapeSql(group_id);
+    // 获取用户数值主键
+    uint64_t user_id_num = getUserIdNum(db_, user_id);
+    if (user_id_num == 0) {
+        std::cerr << "User not found: " << user_id << std::endl;
+        return false;
+    }
+    
+    // 获取群聊数值主键
+    uint64_t group_id_num = getGroupIdNum(db_, group_id);
+    if (group_id_num == 0) {
+        std::cerr << "Group not found: " << group_id << std::endl;
+        return false;
+    }
     
     char sql[512];
     snprintf(sql, sizeof(sql),
              "UPDATE group_request SET status=%d, update_time=NOW() "
-             "WHERE from_user_id='%s' AND group_id='%s' AND status=0",
-             static_cast<int>(status), safe_user_id.c_str(), safe_group_id.c_str());
+             "WHERE from_user_id=%lu AND group_id=%lu AND status=0",
+             static_cast<int>(status), (unsigned long)user_id_num, (unsigned long)group_id_num);
     
     return db_.execute(sql);
 }

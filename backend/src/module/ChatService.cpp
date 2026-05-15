@@ -16,87 +16,21 @@
 #include "model/ChatRecordDAO.h"
 #include "model/GroupMember.h"
 #include "common/Util.h"
+#include "common/JsonUtil.h"
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 /**
- * @brief JSON解析辅助函数（简易实现）
+ * @brief JSON解析辅助函数（使用JsonUtil）
  * @param json JSON字符串
  * @param key 键名
  * @return 键值字符串
  */
 static std::string getJsonValue(const std::string& json, const std::string& key) {
-    std::string search_key = "\"" + key + "\"";
-    size_t pos = json.find(search_key);
-    if (pos == std::string::npos) return "";
-    
-    pos = json.find(":", pos);
-    if (pos == std::string::npos) return "";
-    pos++;
-    
-    // 跳过空白
-    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
-    
-    if (pos >= json.size()) return "";
-    
-    std::string value;
-    if (json[pos] == '"') {
-        // 字符串值 - 正确处理转义引号
-        pos++;
-        size_t end = pos;
-        while (end < json.size()) {
-            if (json[end] == '\\' && end + 1 < json.size()) {
-                end += 2; // 跳过转义字符
-                continue;
-            }
-            if (json[end] == '"') break;
-            end++;
-        }
-        if (end >= json.size()) return "";
-        value = json.substr(pos, end - pos);
-        // 处理转义字符
-        std::string unescaped;
-        for (size_t i = 0; i < value.size(); i++) {
-            if (value[i] == '\\' && i + 1 < value.size()) {
-                switch (value[i + 1]) {
-                    case '"': unescaped += '"'; i++; break;
-                    case '\\': unescaped += '\\'; i++; break;
-                    case 'n': unescaped += '\n'; i++; break;
-                    case 'r': unescaped += '\r'; i++; break;
-                    case 't': unescaped += '\t'; i++; break;
-                    default: unescaped += value[i]; break;
-                }
-            } else {
-                unescaped += value[i];
-            }
-        }
-        value = unescaped;
-    } else if (json[pos] == '{' || json[pos] == '[') {
-        // 对象或数组
-        int bracket_count = 0;
-        char target_bracket = (json[pos] == '{') ? '}' : ']';
-        size_t start = pos;
-        for (; pos < json.size(); pos++) {
-            if (json[pos] == '\\') {
-                pos++; // 跳过转义字符
-                continue;
-            }
-            if (json[pos] == json[start]) bracket_count++;
-            else if (json[pos] == target_bracket) bracket_count--;
-            if (bracket_count == 0) break;
-        }
-        value = json.substr(start, pos - start + 1);
-    } else {
-        // 数字或布尔值
-        size_t end = json.find_first_of(",}", pos);
-        if (end == std::string::npos) end = json.size();
-        value = json.substr(pos, end - pos);
-        // 去除空白
-        value.erase(std::remove_if(value.begin(), value.end(), ::isspace), value.end());
-    }
-    
-    return value;
+    return JsonUtil::getString(json, key);
 }
 
 /**
@@ -105,20 +39,7 @@ static std::string getJsonValue(const std::string& json, const std::string& key)
  * @return 转义后的字符串
  */
 static std::string escapeJson(const std::string& str) {
-    std::string result;
-    for (char c : str) {
-        switch (c) {
-            case '"': result += "\\\""; break;
-            case '\\': result += "\\\\"; break;
-            case '\b': result += "\\b"; break;
-            case '\f': result += "\\f"; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += c; break;
-        }
-    }
-    return result;
+    return JsonUtil::escapeString(str);
 }
 
 /**
@@ -143,6 +64,31 @@ static uint64_t getUserIdNum(Database& db, const std::string& user_id) {
     uint64_t id = strtoull(row[0], nullptr, 10);
     db.freeResult(res);
     return id;
+}
+
+/**
+ * @brief 根据数字ID获取用户ID字符串
+ * @param db 数据库连接
+ * @param id 用户数字ID
+ * @return 用户ID字符串，失败返回空字符串
+ */
+static std::string getUserIdStr(Database& db, uint64_t id) {
+    if (id == 0) return "";
+    char sql[256];
+    snprintf(sql, sizeof(sql), "SELECT user_id FROM user WHERE id=%lu", (unsigned long)id);
+    
+    MYSQL_RES* res = db.query(sql);
+    if (!res) return "";
+    
+    MYSQL_ROW row = mysql_fetch_row(res);
+    if (!row || !row[0]) {
+        db.freeResult(res);
+        return "";
+    }
+    
+    std::string user_id = row[0];
+    db.freeResult(res);
+    return user_id;
 }
 
 /**
@@ -938,6 +884,20 @@ void ChatService::handlePrivateChat(spConnection conn, const Message& msg) {
             question = question.substr(start);
         }
         
+        // 保存用户消息到聊天记录
+        uint64_t from_id_num = getUserIdNum(*db_, from_user_id);
+        uint64_t to_id_num = getUserIdNum(*db_, to_user_id);
+        if (from_id_num > 0 && to_id_num > 0) {
+            ChatRecord record;
+            record.sender_id = from_id_num;
+            record.receiver_id = to_id_num;
+            record.group_id = 0;
+            record.content = content;
+            record.is_ai = 0;
+            ChatRecordDAO record_dao(*db_);
+            record_dao.insert(record);
+        }
+        
         ai_service_->processRequest(from_user_id, to_user_id, question, false, msg.extra);
         
         sendResponse(conn, static_cast<int>(MessageType::CHAT_PRIVATE), 0, 
@@ -998,12 +958,25 @@ void ChatService::handleChatHistory(spConnection conn, const Message& msg) {
     std::vector<ChatRecord> records;
     
     if (is_group) {
-        // 群聊：使用 group_id 查询（字符串格式）
-        uint64_t group_id_num = getUserIdNum(*db_, target_id);
+        // 群聊：使用 group_id 查询
+        // 先从 group_chat 表获取数字 ID
+        char group_sql[256];
+        snprintf(group_sql, sizeof(group_sql), 
+                 "SELECT id FROM group_chat WHERE group_id='%s'", 
+                 db_->escapeString(target_id).c_str());
+        MYSQL_RES* group_res = db_->query(group_sql);
+        uint64_t group_id_num = 0;
+        if (group_res) {
+            MYSQL_ROW group_row = mysql_fetch_row(group_res);
+            if (group_row && group_row[0]) {
+                group_id_num = strtoull(group_row[0], nullptr, 10);
+            }
+            db_->freeResult(group_res);
+        }
+        
         if (group_id_num == 0) {
-            // 尝试直接用字符串作为 group_id 查询
-            // 群聊 ID 可能是 "G" 开头的格式
-            records = record_dao.findByGroup(0); // 暂时返回空
+            std::cerr << "ChatHistory: group not found, group_id=" << target_id << std::endl;
+            records = record_dao.findByGroup(0); // 返回空
         } else {
             records = record_dao.findByGroup(group_id_num);
         }
@@ -1024,9 +997,16 @@ void ChatService::handleChatHistory(spConnection conn, const Message& msg) {
     oss << "[";
     for (size_t i = 0; i < records.size(); i++) {
         if (i > 0) oss << ",";
+        
+        // 获取发送者的字符串 user_id
+        std::string sender_user_id = getUserIdStr(*db_, records[i].sender_id);
+        // 获取接收者的字符串 user_id
+        std::string receiver_user_id = records[i].receiver_id > 0 ? 
+            getUserIdStr(*db_, records[i].receiver_id) : "";
+        
         oss << "{\"id\":" << records[i].id
-            << ",\"sender_id\":" << records[i].sender_id
-            << ",\"receiver_id\":" << records[i].receiver_id
+            << ",\"sender_id\":\"" << sender_user_id << "\""
+            << ",\"receiver_id\":\"" << receiver_user_id << "\""
             << ",\"group_id\":" << records[i].group_id
             << ",\"content\":\"" << escapeJson(records[i].content) << "\""
             << ",\"send_time\":\"" << records[i].send_time << "\""
@@ -1454,7 +1434,7 @@ void ChatService::handleUploadAvatar(spConnection conn, const Message& msg) {
     std::string filepath = "./backend/static/avatars/" + filename;
     
     // 确保目录存在
-    system("mkdir -p ./backend/static/avatars");
+    mkdir("./backend/static/avatars", 0755);
     
     // 提取 Base64 数据（去掉 "data:image/xxx;base64," 前缀）
     std::string base64_content = avatar_data;

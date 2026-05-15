@@ -29,6 +29,10 @@ CREATE TABLE `user` (
     KEY `idx_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
 
+-- 插入AI系统用户（用于AI消息的sender_id）
+INSERT INTO `user` (`user_id`, `username`, `nickname`, `password`, `phone`, `ai_nickname`, `ai_tone`, `ai_priority`)
+VALUES ('ai', 'AI系统', 'AI助手', '', '', 'AI助手', 0, 0);
+
 -- ============================================
 -- 2. 群聊表 (group_chat)
 -- ============================================

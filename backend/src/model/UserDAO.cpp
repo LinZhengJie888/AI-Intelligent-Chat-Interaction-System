@@ -23,14 +23,23 @@ UserDAO::UserDAO(Database& db) : db_(db) {}
  */
 bool UserDAO::insert(User& user) {
     char sql[2048];
+    // 对所有字符串字段进行转义
+    std::string safe_user_id = db_.escapeString(user.user_id);
+    std::string safe_username = db_.escapeString(user.username);
+    std::string safe_nickname = db_.escapeString(user.nickname);
+    std::string safe_password = db_.escapeString(user.password);
+    std::string safe_phone = db_.escapeString(user.phone);
+    std::string safe_avatar_path = db_.escapeString(user.avatar_path);
+    std::string safe_ai_nickname = db_.escapeString(user.ai_nickname);
+    
     snprintf(sql, sizeof(sql),
             "INSERT INTO user (user_id, username, nickname, password, phone, "
             "avatar_path, ai_nickname, ai_tone, ai_priority) VALUES "
             "('%s', '%s', '%s', '%s', '%s', '%s', '%s', %d, %d)",
-            user.user_id.c_str(), user.username.c_str(),
-            user.nickname.c_str(), user.password.c_str(),
-            user.phone.c_str(), user.avatar_path.c_str(),
-            user.ai_nickname.c_str(), user.ai_tone, user.ai_priority);
+            safe_user_id.c_str(), safe_username.c_str(),
+            safe_nickname.c_str(), safe_password.c_str(),
+            safe_phone.c_str(), safe_avatar_path.c_str(),
+            safe_ai_nickname.c_str(), user.ai_tone, user.ai_priority);
     
     if (!db_.execute(sql)) {
         return false;
@@ -60,12 +69,20 @@ bool UserDAO::insert(User& user) {
  */
 bool UserDAO::update(const User& user) {
     char sql[2048];
+    // 对所有字符串字段进行转义
+    std::string safe_username = db_.escapeString(user.username);
+    std::string safe_nickname = db_.escapeString(user.nickname);
+    std::string safe_password = db_.escapeString(user.password);
+    std::string safe_phone = db_.escapeString(user.phone);
+    std::string safe_avatar_path = db_.escapeString(user.avatar_path);
+    std::string safe_ai_nickname = db_.escapeString(user.ai_nickname);
+    
     snprintf(sql, sizeof(sql),
             "UPDATE user SET username='%s', nickname='%s', password='%s', "
             "phone='%s', avatar_path='%s', ai_nickname='%s', ai_tone=%d, "
             "ai_priority=%d WHERE id=%lu",
-            user.username.c_str(), user.nickname.c_str(), user.password.c_str(),
-            user.phone.c_str(), user.avatar_path.c_str(), user.ai_nickname.c_str(),
+            safe_username.c_str(), safe_nickname.c_str(), safe_password.c_str(),
+            safe_phone.c_str(), safe_avatar_path.c_str(), safe_ai_nickname.c_str(),
             user.ai_tone, user.ai_priority, (unsigned long)user.id);
     bool ok = db_.execute(sql);
     if (ok) {
@@ -193,7 +210,8 @@ User* UserDAO::findByUserId(const std::string& user_id) {
 
     // 回退到数据库查询
     char sql[256];
-    snprintf(sql, sizeof(sql), "SELECT * FROM user WHERE user_id='%s'", user_id.c_str());
+    std::string safe_user_id = db_.escapeString(user_id);
+    snprintf(sql, sizeof(sql), "SELECT * FROM user WHERE user_id='%s'", safe_user_id.c_str());
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) return nullptr;
@@ -245,7 +263,8 @@ User* UserDAO::findByUserId(const std::string& user_id) {
  */
 User* UserDAO::findByPhone(const std::string& phone) {
     char sql[256];
-    snprintf(sql, sizeof(sql), "SELECT * FROM user WHERE phone='%s'", phone.c_str());
+    std::string safe_phone = db_.escapeString(phone);
+    snprintf(sql, sizeof(sql), "SELECT * FROM user WHERE phone='%s'", safe_phone.c_str());
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) return nullptr;

@@ -29,17 +29,18 @@ VerifyService::~VerifyService() {
  */
 bool VerifyService::init() {
     // 创建验证码表（如果不存在）
+    // 注意：此表结构必须与 db/mysql/init.sql 中的定义保持一致
     std::string create_table_sql = 
         "CREATE TABLE IF NOT EXISTS verification_code ("
         "id BIGINT AUTO_INCREMENT PRIMARY KEY,"
-        "phone VARCHAR(20),"
-        "code VARCHAR(10) NOT NULL,"
-        "token VARCHAR(64) NOT NULL UNIQUE,"
+        "phone VARCHAR(20) NOT NULL,"
+        "code VARCHAR(16) NOT NULL,"
+        "captcha_token VARCHAR(64) DEFAULT NULL,"
         "expire_time DATETIME NOT NULL,"
-        "create_time DATETIME DEFAULT CURRENT_TIMESTAMP,"
+        "send_time DATETIME DEFAULT CURRENT_TIMESTAMP,"
         "is_used TINYINT DEFAULT 0,"
-        "INDEX idx_token (token),"
-        "INDEX idx_phone (phone)"
+        "INDEX idx_phone (phone),"
+        "INDEX idx_expire_time (expire_time)"
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
     
     if (!db_.execute(create_table_sql)) {
@@ -319,10 +320,15 @@ bool VerifyService::saveCaptchaToDB(const CaptchaInfo& info) {
     std::strftime(expire_time_str, sizeof(expire_time_str), 
                   "%Y-%m-%d %H:%M:%S", std::localtime(&info.expire_time));
     
+    // 对字符串字段进行转义
+    std::string safe_phone = db_.escapeString(info.phone);
+    std::string safe_code = db_.escapeString(info.code);
+    std::string safe_token = db_.escapeString(info.token);
+    
     snprintf(sql, sizeof(sql),
              "INSERT INTO verification_code (phone, code, captcha_token, expire_time, is_used) "
              "VALUES ('%s', '%s', '%s', '%s', %d)",
-             info.phone.c_str(), info.code.c_str(), info.token.c_str(),
+             safe_phone.c_str(), safe_code.c_str(), safe_token.c_str(),
              expire_time_str, info.used ? 1 : 0);
     
     return db_.execute(sql);
@@ -333,10 +339,11 @@ bool VerifyService::saveCaptchaToDB(const CaptchaInfo& info) {
  */
 bool VerifyService::loadCaptchaFromDB(const std::string& token, CaptchaInfo& info) {
     char sql[512];
+    std::string safe_token = db_.escapeString(token);
     snprintf(sql, sizeof(sql),
-             "SELECT id, phone, code, token, expire_time, create_time, is_used "
-             "FROM verification_code WHERE token='%s'",
-             token.c_str());
+             "SELECT id, phone, code, captcha_token, expire_time, send_time, is_used "
+             "FROM verification_code WHERE captcha_token='%s'",
+             safe_token.c_str());
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -377,9 +384,10 @@ bool VerifyService::loadCaptchaFromDB(const std::string& token, CaptchaInfo& inf
  */
 bool VerifyService::updateCaptchaStatus(const std::string& token, bool used) {
     char sql[256];
+    std::string safe_token = db_.escapeString(token);
     snprintf(sql, sizeof(sql),
-             "UPDATE verification_code SET is_used=%d WHERE token='%s'",
-             used ? 1 : 0, token.c_str());
+             "UPDATE verification_code SET is_used=%d WHERE captcha_token='%s'",
+             used ? 1 : 0, safe_token.c_str());
     
     return db_.execute(sql);
 }

@@ -1,0 +1,663 @@
+
+========== 初始化服务 ==========
+1. 加载配置文件...
+   数据库配置: root@127.0.0.1:3306/ai_chat_system
+
+2. 连接数据库...
+WARNING: MYSQL_OPT_RECONNECT is deprecated and will be removed in a future version.
+   数据库连接成功！
+
+3. 初始化ChatService...
+VerifyService initialized successfully
+FriendService initialized successfully
+Group tables schema check passed
+GroupService initialized successfully
+AiService initialized successfully
+AI API URL: https://token-plan-cn.xiaomimimo.com/v1/chat/completions
+AI Model: mimo-v2.5-pro
+ChatService initialized successfully
+   ChatService初始化成功！
+
+========== 服务初始化完成 ==========
+
+Starting AI Chat Server on 127.0.0.1:8080...
+create IO thread(6675).
+create IO thread(6676).
+create IO thread(6677).
+Server started successfully!
+Waiting for connections...
+New connection: fd=18, ip=127.0.0.1, port=60988
+[Connection] fd=18 read n=210
+[Connection] fd=18 inputbuffer.size=210
+[Connection] fd=18 read n=105
+[Connection] fd=18 inputbuffer.size=315
+[ChatService] Received raw message (len=101): {"type":23,"from_user_id":"1111","to_user_id":"","content":"","extra":"","timestamp":"1778811816286"}
+[ChatService] Mapped fd=18 to user_id=1111
+[ChatService] Sending response: {"type":23,"code":0,"msg":"Success","data":[{"user_id":"1234","username":"正","nickname":"正","avatar_path":"","remark":"","add_time":"2026-05-14 23:44:21"}],"timestamp":"2026-05-15 10:23:42"}
+[Connection] sendinloop called fd=18, size=194
+[ChatService] Received raw message (len=101): {"type":36,"from_user_id":"1111","to_user_id":"","content":"","extra":"","timestamp":"1778811816287"}
+[ChatService] Sending response: {"type":36,"code":0,"msg":"Success","data":[{"group_id":"Gad9087d3","group_name":"群益","avatar_path":"","member_count":2,"create_time":"2026-05-14 23:45:43"}],"timestamp":"2026-05-15 10:23:42"}
+[Connection] sendinloop called fd=18, size=196
+[ChatService] Received raw message (len=101): {"type":25,"from_user_id":"1111","to_user_id":"","content":"","extra":"","timestamp":"1778811816287"}
+[ChatService] Sending response: {"type":25,"code":0,"msg":"Success","data":[],"timestamp":"2026-05-15 10:23:42"}
+[Connection] sendinloop called fd=18, size=80
+[Connection] writecallback fd=18, try_send_len=482, writen=482
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=18
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=18
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=18
+[Connection] fd=18 closed by peer
+User 1111 disconnected
+New connection: fd=19, ip=127.0.0.1, port=60310
+[Connection] fd=19 read n=210
+[Connection] fd=19 inputbuffer.size=210
+[Connection] fd=19 read n=105
+[Connection] fd=19 inputbuffer.size=315
+[ChatService] Received raw message (len=101): {"type":23,"from_user_id":"1111","to_user_id":"","content":"","extra":"","timestamp":"1778811836491"}
+[ChatService] Mapped fd=19 to user_id=1111
+[ChatService] Sending response: {"type":23,"code":0,"msg":"Success","data":[{"user_id":"1234","username":"正","nickname":"正","avatar_path":"","remark":"","add_time":"2026-05-14 23:44:21"}],"timestamp":"2026-05-15 10:24:02"}
+[Connection] sendinloop called fd=19, size=194
+[ChatService] Received raw message (len=101): {"type":36,"from_user_id":"1111","to_user_id":"","content":"","extra":"","timestamp":"1778811836491"}
+[ChatService] Sending response: {"type":36,"code":0,"msg":"Success","data":[{"group_id":"Gad9087d3","group_name":"群益","avatar_path":"","member_count":2,"create_time":"2026-05-14 23:45:43"}],"timestamp":"2026-05-15 10:24:02"}
+[Connection] sendinloop called fd=19, size=196
+[ChatService] Received raw message (len=101): {"type":25,"from_user_id":"1111","to_user_id":"","content":"","extra":"","timestamp":"1778811836491"}
+[ChatService] Sending response: {"type":25,"code":0,"msg":"Success","data":[],"timestamp":"2026-05-15 10:24:02"}
+[Connection] sendinloop called fd=19, size=80
+[Connection] writecallback fd=19, try_send_len=482, writen=482
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+New connection: fd=18, ip=127.0.0.1, port=48808
+[Connection] fd=18 read n=210
+[Connection] fd=18 inputbuffer.size=210
+[Connection] fd=18 read n=105
+[Connection] fd=18 inputbuffer.size=315
+[ChatService] Received raw message (len=101): {"type":23,"from_user_id":"1234","to_user_id":"","content":"","extra":"","timestamp":"1778811870015"}
+[ChatService] Mapped fd=18 to user_id=1234
+[ChatService] Sending response: {"type":23,"code":0,"msg":"Success","data":[{"user_id":"1111","username":"林","nickname":"林","avatar_path":"","remark":"","add_time":"2026-05-14 23:44:21"}],"timestamp":"2026-05-15 10:24:36"}
+[Connection] sendinloop called fd=18, size=194
+[ChatService] Received raw message (len=101): {"type":36,"from_user_id":"1234","to_user_id":"","content":"","extra":"","timestamp":"1778811870015"}
+[ChatService] Sending response: {"type":36,"code":0,"msg":"Success","data":[{"group_id":"Gad9087d3","group_name":"群益","avatar_path":"","member_count":2,"create_time":"2026-05-14 23:45:43"}],"timestamp":"2026-05-15 10:24:36"}
+[Connection] sendinloop called fd=18, size=196
+[ChatService] Received raw message (len=101): {"type":25,"from_user_id":"1234","to_user_id":"","content":"","extra":"","timestamp":"1778811870015"}
+[ChatService] Sending response: {"type":25,"code":0,"msg":"Success","data":[],"timestamp":"2026-05-15 10:24:36"}
+[Connection] sendinloop called fd=18, size=80
+[Connection] writecallback fd=18, try_send_len=482, writen=482
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=18 read n=105
+[Connection] fd=18 inputbuffer.size=105
+[ChatService] Received raw message (len=101): {"type":25,"from_user_id":"1234","to_user_id":"","content":"","extra":"","timestamp":"1778811896097"}
+[ChatService] Sending response: {"type":25,"code":0,"msg":"Success","data":[],"timestamp":"2026-05-15 10:25:02"}
+[Connection] sendinloop called fd=18, size=80
+[Connection] fd=18 read n=105
+[Connection] fd=18 inputbuffer.size=105
+[ChatService] Received raw message (len=101): {"type":23,"from_user_id":"1234","to_user_id":"","content":"","extra":"","timestamp":"1778811896097"}
+[ChatService] Sending response: {"type":23,"code":0,"msg":"Success","data":[{"user_id":"1111","username":"林","nickname":"林","avatar_path":"","remark":"","add_time":"2026-05-14 23:44:21"}],"timestamp":"2026-05-15 10:25:02"}
+[Connection] sendinloop called fd=18, size=194
+[Connection] writecallback fd=18, try_send_len=282, writen=282
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=105
+[Connection] fd=18 inputbuffer.size=105
+[ChatService] Received raw message (len=101): {"type":36,"from_user_id":"1234","to_user_id":"","content":"","extra":"","timestamp":"1778811897558"}
+[ChatService] Sending response: {"type":36,"code":0,"msg":"Success","data":[{"group_id":"Gad9087d3","group_name":"群益","avatar_path":"","member_count":2,"create_time":"2026-05-14 23:45:43"}],"timestamp":"2026-05-15 10:25:03"}
+[Connection] sendinloop called fd=18, size=196
+[Connection] writecallback fd=18, try_send_len=200, writen=200
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=129
+[Connection] fd=18 inputbuffer.size=129
+[ChatService] Received raw message (len=125): {"type":41,"from_user_id":"1234","to_user_id":"1111","content":"","extra":"{\"is_group\":false}","timestamp":"1778811919181"}
+[ChatService] Sending response: {"type":41,"code":0,"msg":"Success","data":[{"id":25,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"@AI 是谁啊","send_time":"2026-05-15 00:11:15","is_ai":0},{"id":24,"sender_id":"1234","receiver_id":"1111","group_id":0,"content":"啥样","send_time":"2026-05-15 00:11:01","is_ai":0},{"id":19,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"@AI 你好","send_time":"2026-05-15 00:10:20","is_ai":0},{"id":9,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"@AI 懂了吗","send_time":"2026-05-14 23:52:02","is_ai":0},{"id":8,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"好的","send_time":"2026-05-14 23:51:53","is_ai":0},{"id":4,"sender_id":"1234","receiver_id":"1111","group_id":0,"content":"@AI 你好吗","send_time":"2026-05-14 23:45:01","is_ai":0},{"id":3,"sender_id":"1234","receiver_id":"1111","group_id":0,"content":"哈喽","send_time":"2026-05-14 23:44:50","is_ai":0},{"id":2,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"哈喽","send_time":"2026-05-14 23:44:41","is_ai":0},{"id":1,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"哈喽","send_time":"2026-05-14 23:44:28","is_ai":0}],"timestamp":"2026-05-15 10:25:25"}
+[Connection] sendinloop called fd=18, size=1232
+[Connection] writecallback fd=18, try_send_len=1236, writen=1236
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=327
+[Connection] fd=18 inputbuffer.size=327
+[ChatService] Received raw message (len=123): {"type":40,"from_user_id":"1234","to_user_id":"1111","content":"@AI 介绍下linux","extra":"","timestamp":"1778811928565"}
+[ChatService] Sending response: {"type":40,"code":0,"msg":"Message sent","timestamp":"2026-05-15 10:25:34"}
+[Connection] sendinloop called fd=18, size=75
+[ChatService] Received raw message (len=196): {"type":51,"from_user_id":"1234","to_user_id":"1111","content":"介绍下linux","extra":"{\"ai_nickname\":\"AI助手\",\"chatKey\":\"single:1111\",\"is_group\":false}","timestamp":"1778811928565"}
+[Connection] sendinloop called fd=19, size=125
+[Connection] writecallback fd=19, try_send_len=129, writen=129
+AI request queued: AI_45bc070c-c74 from 1234
+[ChatService] Sending response: {"type":51,"code":0,"msg":"AI request received","timestamp":"2026-05-15 10:25:34"}
+[Connection] sendinloop called fd=18, size=82
+[Connection] writecallback fd=18, try_send_len=165, writen=165
+[AI] Processing request: AI_45bc070c-c74
+[AI] Chat settings not found, using default nickname: AI助手
+[AI] Calling API...
+[AI] Calling API: https://token-plan-cn.xiaomimimo.com/v1/chat/completions
+[AI] Model: mimo-v2.5-pro
+[AI] Request body: {"model":"mimo-v2.5-pro","messages":[{"role":"system","content":"你是一个智能聊天助手。请用简洁、友好的语气回答。请简洁回答，控制在50字以内。回答要简洁、精�...
+[AI] HTTP request attempt 1/3
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=129
+[Connection] fd=19 inputbuffer.size=129
+[ChatService] Received raw message (len=125): {"type":41,"from_user_id":"1111","to_user_id":"1234","content":"","extra":"{\"is_group\":false}","timestamp":"1778811930533"}
+[ChatService] Sending response: {"type":41,"code":0,"msg":"Success","data":[{"id":29,"sender_id":"1234","receiver_id":"1111","group_id":0,"content":"@AI 介绍下linux","send_time":"2026-05-15 10:25:34","is_ai":0},{"id":25,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"@AI 是谁啊","send_time":"2026-05-15 00:11:15","is_ai":0},{"id":24,"sender_id":"1234","receiver_id":"1111","group_id":0,"content":"啥样","send_time":"2026-05-15 00:11:01","is_ai":0},{"id":19,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"@AI 你好","send_time":"2026-05-15 00:10:20","is_ai":0},{"id":9,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"@AI 懂了吗","send_time":"2026-05-14 23:52:02","is_ai":0},{"id":8,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"好的","send_time":"2026-05-14 23:51:53","is_ai":0},{"id":4,"sender_id":"1234","receiver_id":"1111","group_id":0,"content":"@AI 你好吗","send_time":"2026-05-14 23:45:01","is_ai":0},{"id":3,"sender_id":"1234","receiver_id":"1111","group_id":0,"content":"哈喽","send_time":"2026-05-14 23:44:50","is_ai":0},{"id":2,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"哈喽","send_time":"2026-05-14 23:44:41","is_ai":0},{"id":1,"sender_id":"1111","receiver_id":"1234","group_id":0,"content":"哈喽","send_time":"2026-05-14 23:44:28","is_ai":0}],"timestamp":"2026-05-15 10:25:36"}
+[Connection] sendinloop called fd=19, size=1370
+[Connection] writecallback fd=19, try_send_len=1374, writen=1374
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=19 read n=115
+[Connection] fd=19 inputbuffer.size=115
+[ChatService] Received raw message (len=111): {"type":40,"from_user_id":"1111","to_user_id":"1234","content":"你好","extra":"","timestamp":"1778811934476"}
+[ChatService] Sending response: {"type":40,"code":0,"msg":"Message sent","timestamp":"2026-05-15 10:25:40"}
+[Connection] sendinloop called fd=19, size=75
+[Connection] writecallback fd=19, try_send_len=79, writen=79
+[Connection] sendinloop called fd=18, size=113
+[Connection] writecallback fd=18, try_send_len=117, writen=117
+[AI] curl result: res=0, http_code=200, response_len=1076
+[AI] HTTP response received, length=1076
+[AI] parseAIResponse returned, checking result...
+[AI] Parsing response, length=1076
+[AI] Choices: [{"finish_reason":"stop","index":0,"message":{"content":"Linux 是一种免费开源的操作系统�
+[AI] Choices is array, finding message...
+[AI] message pos: 35
+[AI] message string: "message":{"content":"Linux 是一种免费开源的操作系统内核，常以发行版形式出现
+[AI] Content from message: Linux 是一种免费开源的操作系统内核，常以发行版形式出现（如Ubuntu、Fedora�
+[AI] parseAIResponse returned true
+[AI] Parsed content: Linux 是一种免费开源的操作系统内核，常以发行版形式出现（如Ubuntu、Fedora）。它稳定、安全、可定制，广泛应用于服务器、嵌入式设备和开发领域。
+[AI] Caching response...
+[AI] Response cached
+[AI] Breaking from retry loop...
+[AI] callAIAPI returning: 1
+[AI] Logging API call...
+[AI] Success=1, response length=198
+[AI] Splitting response...
+[AI] Split into 4 messages
+[AI] Sending response to user: 1111
+[AI] Sending AI response to 1111, messages=4
+[Connection] sendinloop called fd=18, size=282
+[Connection] writecallback fd=18, try_send_len=286, writen=286
+[Connection] sendinloop called fd=19, size=282
+[Connection] writecallback fd=19, try_send_len=286, writen=286
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] sendinloop called fd=18, size=285
+[Connection] sendinloop called fd=19, size=285
+[Connection] writecallback fd=18, try_send_len=289, writen=289
+[Connection] writecallback fd=19, try_send_len=289, writen=289
+[Connection] sendinloop called fd=18, size=264
+[Connection] writecallback fd=18, try_send_len=268, writen=268
+[Connection] sendinloop called fd=19, size=264
+[Connection] writecallback fd=19, try_send_len=268, writen=268
+[Connection] sendinloop called fd=[Connection] sendinloop called fd=1918, size=, size=291291
+
+[Connection] writecallback fd=19, try_send_len=295, writen=295
+[Connection] writecallback fd=18, try_send_len=295, writen=295
+[AI] Response sent successfully
+[AI] Removing from pending queue...
+[AI] Request processed: AI_45bc070c-c74 in 6171ms
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=133
+[Connection] fd=18 inputbuffer.size=133
+[ChatService] Received raw message (len=129): {"type":41,"from_user_id":"1234","to_user_id":"Gad9087d3","content":"","extra":"{\"is_group\":true}","timestamp":"1778811942693"}
+[ChatService] Sending response: {"type":41,"code":0,"msg":"Success","data":[{"id":14,"sender_id":"1111","receiver_id":"","group_id":1,"content":"@AI 你好","send_time":"2026-05-15 00:09:58","is_ai":0},{"id":11,"sender_id":"1111","receiver_id":"","group_id":1,"content":"@AI 你好","send_time":"2026-05-14 23:52:29","is_ai":0},{"id":7,"sender_id":"1234","receiver_id":"","group_id":1,"content":"好的呢","send_time":"2026-05-14 23:46:25","is_ai":0},{"id":6,"sender_id":"1111","receiver_id":"","group_id":1,"content":"同意了","send_time":"2026-05-14 23:46:13","is_ai":0}],"timestamp":"2026-05-15 10:25:48"}
+[Connection] sendinloop called fd=18, size=579
+[Connection] writecallback fd=18, try_send_len=583, writen=583
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=133
+[Connection] fd=19 inputbuffer.size=133
+[ChatService] Received raw message (len=129): {"type":41,"from_user_id":"1111","to_user_id":"Gad9087d3","content":"","extra":"{\"is_group\":true}","timestamp":"1778811946214"}
+[ChatService] Sending response: {"type":41,"code":0,"msg":"Success","data":[{"id":14,"sender_id":"1111","receiver_id":"","group_id":1,"content":"@AI 你好","send_time":"2026-05-15 00:09:58","is_ai":0},{"id":11,"sender_id":"1111","receiver_id":"","group_id":1,"content":"@AI 你好","send_time":"2026-05-14 23:52:29","is_ai":0},{"id":7,"sender_id":"1234","receiver_id":"","group_id":1,"content":"好的呢","send_time":"2026-05-14 23:46:25","is_ai":0},{"id":6,"sender_id":"1111","receiver_id":"","group_id":1,"content":"同意了","send_time":"2026-05-14 23:46:13","is_ai":0}],"timestamp":"2026-05-15 10:25:52"}
+[Connection] sendinloop called fd=19, size=579
+[Connection] writecallback fd=19, try_send_len=583, writen=583
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=19 read n=119
+[Connection] fd=19 inputbuffer.size=119
+[ChatService] Received raw message (len=115): {"type":34,"from_user_id":"1111","to_user_id":"Gad9087d3","content":"11111","extra":"","timestamp":"1778811949773"}
+[ChatService] Sending response: {"type":34,"code":0,"msg":"Message sent","timestamp":"2026-05-15 10:25:55"}
+[Connection] sendinloop called fd=19, size=75
+[Connection] writecallback fd=19, try_send_len=79, writen=79
+[Connection] sendinloop called fd=18, size=135
+[Connection] writecallback fd=18, try_send_len=139, writen=139
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=326
+[Connection] fd=18 inputbuffer.size=326
+[ChatService] Received raw message (len=123): {"type":34,"from_user_id":"1234","to_user_id":"Gad9087d3","content":"@AI 早上好","extra":"","timestamp":"1778811957198"}
+[ChatService] Sending response: {"type":34,"code":0,"msg":"Message sent","timestamp":"2026-05-15 10:26:03"}
+[Connection] sendinloop called fd=18, size=75
+[ChatService] Received raw message (len=195): {"type":51,"from_user_id":"1234","to_user_id":"Gad9087d3","content":"早上好","extra":"{\"ai_nickname\":\"群A\",\"chatKey\":\"group:Gad9087d3\",\"is_group\":true}","timestamp":"1778811957198"}
+[Connection] sendinloop called fd=19, size=143
+AI request queued: AI_1f5d7454-cfd from 1234
+[ChatService] Sending response: {"type":51,"code":0,"msg":"AI request received","timestamp":"2026-05-15 10:26:03"}
+[Connection] writecallback fd=[Connection] sendinloop called fd=18, size=82
+[AI] Processing request: AI_1f5d7454-cfd
+[Connection] writecallback fd=18, try_send_len=165, writen=165
+19, try_send_len=147, writen=147
+[AI] Chat settings: chat_key=group:Gad9087d3, nickname=群A, tone=0, priority=1
+[AI] Calling API...
+[AI] Calling API: https://token-plan-cn.xiaomimimo.com/v1/chat/completions
+[AI] Model: mimo-v2.5-pro
+[AI] Request body: {"model":"mimo-v2.5-pro","messages":[{"role":"system","content":"你是一个智能聊天助手。请用简洁、友好的语气回答。请简洁回答，控制在50字以内。回答要简洁、精�...
+[AI] HTTP request attempt 1/3
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[AI] curl result: res=0, http_code=200, response_len=915
+[AI] HTTP response received, length=915
+[AI] parseAIResponse returned, checking result...
+[AI] Parsing response, length=915
+[AI] Choices: [{"finish_reason":"stop","index":0,"message":{"content":"早上好！☀️ 祝你新的一天充满
+[AI] Choices is array, finding message...
+[AI] message pos: 35
+[AI] message string: "message":{"content":"早上好！☀️ 祝你新的一天充满活力～","reasoning_content":"嗯
+[AI] Content from message: 早上好！☀️ 祝你新的一天充满活力～
+[AI] parseAIResponse returned true
+[AI] Parsed content: 早上好！☀️ 祝你新的一天充满活力～
+[AI] Caching response...
+[AI] Response cached
+[AI] Breaking from retry loop...
+[AI] callAIAPI returning: 1
+[AI] Logging API call...
+[AI] Success=1, response length=52
+[AI] Splitting response...
+[AI] Split into 2 messages
+[AI] Sending response to user: Gad9087d3
+[AI] Sending AI response to Gad9087d3, messages=2
+[Connection] sendinloop called fd=19, size=275
+[Connection] writecallback fd=19, try_send_len=279, writen=279
+[Connection] sendinloop called fd=18, size=275
+[Connection] writecallback fd=18, try_send_len=279, writen=279
+MySQL execute error: Cannot add or update a child row: a foreign key constraint fails (`ai_chat_system`.`chat_record`, CONSTRAINT `fk_chat_record_receiver` FOREIGN KEY (`receiver_id`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE)
+[Connection] sendinloop called fd=19, size=303
+[Connection] sendinloop called fd=18, size=303
+[Connection] writecallback fd=19, try_send_len=307, writen=307
+[Connection] writecallback fd=18, try_send_len=307, writen=307
+MySQL execute error: Cannot add or update a child row: a foreign key constraint fails (`ai_chat_system`.`chat_record`, CONSTRAINT `fk_chat_record_receiver` FOREIGN KEY (`receiver_id`) REFERENCES `user` (`id`) ON DELETE SET NULL ON UPDATE CASCADE)
+[AI] Response sent successfully
+[AI] Removing from pending queue...
+[AI] Request processed: AI_1f5d7454-cfd in 9465ms
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=127
+[Connection] fd=18 inputbuffer.size=127
+[ChatService] Received raw message (len=123): {"type":41,"from_user_id":"1234","to_user_id":"ai","content":"","extra":"{\"is_group\":false}","timestamp":"1778811982001"}
+[ChatService] Sending response: {"type":41,"code":0,"msg":"Success","data":[{"id":32,"sender_id":"ai","receiver_id":"1234","group_id":0,"content":"常以发行版形式出现（如Ubuntu、Fedora）。","send_time":"2026-05-15 10:25:41","is_ai":1},{"id":33,"sender_id":"ai","receiver_id":"1234","group_id":0,"content":"它稳定、安全、可定制，","send_time":"2026-05-15 10:25:41","is_ai":1},{"id":34,"sender_id":"ai","receiver_id":"1234","group_id":0,"content":"广泛应用于服务器、嵌入式设备和开发领域。","send_time":"2026-05-15 10:25:41","is_ai":1},{"id":31,"sender_id":"ai","receiver_id":"1234","group_id":0,"content":"Linux 是一种免费开源的操作系统内核，","send_time":"2026-05-15 10:25:40","is_ai":1},{"id":5,"sender_id":"ai","receiver_id":"1234","group_id":0,"content":"我很好，谢谢关心！你呢？","send_time":"2026-05-14 23:45:01","is_ai":1}],"timestamp":"2026-05-15 10:26:28"}
+[Connection] sendinloop called fd=18, size=902
+[Connection] writecallback fd=18, try_send_len=906, writen=906
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=31
+[Connection] fd=18 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1234 for fd=18
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=18 read n=104
+[Connection] fd=18 inputbuffer.size=104
+[ChatService] Received raw message (len=100): {"type":3,"from_user_id":"1234","to_user_id":"","content":"","extra":"","timestamp":"1778812007505"}
+[ChatService] Sending response: {"type":3,"code":0,"msg":"Logout successful","timestamp":"2026-05-15 10:26:53"}
+[Connection] sendinloop called fd=18, size=79
+User 1234 logged out
+[Connection] writecallback fd=18, try_send_len=83, writen=83
+[Connection] fd=18 closed by peer
+New connection: fd=20, ip=127.0.0.1, port=60628
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=131
+[Connection] fd=20 inputbuffer.size=131
+[ChatService] Received raw message (len=127): {"type":1,"from_user_id":"1111","to_user_id":"","content":"","extra":"{\"password\":\"12345678\"}","timestamp":"1778812047479"}
+[ChatService] Mapped fd=20 to user_id=1111
+[ChatService] Sending response: {"type":1,"code":0,"msg":"Login successful","data":{"user_id":"1111","username":"林","nickname":"林","avatar_path":"","ai_nickname":"AI助手","ai_tone":0,"ai_priority":0},"timestamp":"2026-05-15 10:27:33"}
+[Connection] sendinloop called fd=20, size=208
+User 1111 logged in
+[Connection] writecallback fd=20, try_send_len=212, writen=212
+[Connection] fd=20 read n=105
+[Connection] fd=20 inputbuffer.size=105
+[ChatService] Received raw message (len=101): {"type":23,"from_user_id":"1111","to_user_id":"","content":"","extra":"","timestamp":"1778812047483"}
+[ChatService] Sending response: {"type":23,"code":0,"msg":"Success","data":[{"user_id":"1234","username":"正","nickname":"正","avatar_path":"","remark":"","add_time":"2026-05-14 23:44:21"}],"timestamp":"2026-05-15 10:27:33"}
+[Connection] sendinloop called fd=20, size=194
+[Connection] writecallback fd=20, try_send_len=198, writen=198
+[Connection] fd=20 read n=210
+[Connection] fd=20 inputbuffer.size=210
+[ChatService] Received raw message (len=101): {"type":36,"from_user_id":"1111","to_user_id":"","content":"","extra":"","timestamp":"1778812047483"}
+[ChatService] Sending response: {"type":36,"code":0,"msg":"Success","data":[{"group_id":"Gad9087d3","group_name":"群益","avatar_path":"","member_count":2,"create_time":"2026-05-14 23:45:43"}],"timestamp":"2026-05-15 10:27:33"}
+[Connection] sendinloop called fd=20, size=196
+[ChatService] Received raw message (len=101): {"type":25,"from_user_id":"1111","to_user_id":"","content":"","extra":"","timestamp":"1778812047483"}
+[ChatService] Sending response: {"type":25,"code":0,"msg":"Success","data":[],"timestamp":"2026-05-15 10:27:33"}
+[Connection] sendinloop called fd=20, size=80
+[Connection] writecallback fd=20, try_send_len=284, writen=284
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=20
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=20
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=20
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=20
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=20
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=20
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=20
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+[Connection] fd=20 read n=31
+[Connection] fd=20 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=20
+[Connection] fd=19 read n=31
+[Connection] fd=19 inputbuffer.size=31
+[ChatService] Received raw message (len=27): {"type":0,"content":"ping"}
+[ChatService] Recovered from_user_id=1111 for fd=19
+Received signal 15, stopping server...
+epoll_wait() failed: Interrupted system call
+主事件循环已停止。
+从事件循环已停止。
+IO线程池停止。

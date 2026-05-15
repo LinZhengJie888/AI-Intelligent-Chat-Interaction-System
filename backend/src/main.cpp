@@ -2,6 +2,7 @@
 #include <string>
 #include <functional>
 #include <signal.h>
+#include <atomic>
 #include "reactor/TcpServer.h"
 #include "reactor/EventLoop.h"
 #include "reactor/Connection.h"
@@ -13,19 +14,17 @@
 #include "model/UserDAO.h"
 #include "common/Util.h"
 
-TcpServer *server;
-Database *db;
+TcpServer *server = nullptr;
+Database *db = nullptr;
+std::atomic<bool> g_running(true);
 
 void Stop(int sig)
 {
     std::cout << "Received signal " << sig << ", stopping server..." << std::endl;
-    server->stop();
-    delete server;
-    if (db) {
-        delete db;
+    g_running = false;
+    if (server) {
+        server->stop();
     }
-    std::cout << "Server stopped." << std::endl;
-    exit(0);
 }
 
 void HandleNewConnection(spConnection conn)
@@ -212,6 +211,16 @@ int main(int argc, char *argv[])
     std::cout << "Waiting for connections..." << std::endl;
     
     server->start();
+    
+    // 清理资源
+    std::cout << "Cleaning up resources..." << std::endl;
+    delete server;
+    server = nullptr;
+    if (db) {
+        delete db;
+        db = nullptr;
+    }
+    std::cout << "Server stopped." << std::endl;
     
     return 0;
 }

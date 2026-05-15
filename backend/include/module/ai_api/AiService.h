@@ -12,10 +12,12 @@
 #include <vector>
 #include <map>
 #include <mutex>
+#include <queue>
 #include <functional>
 #include <memory>
 #include <atomic>
 #include <thread>
+#include <condition_variable>
 
 class Database;
 
@@ -281,6 +283,14 @@ private:
     // 请求队列
     std::map<std::string, AIRequest> pending_requests_;
     std::mutex request_mutex_;
+    
+    // 线程池
+    std::vector<std::thread> worker_threads_;
+    std::queue<AIRequest> task_queue_;
+    std::mutex queue_mutex_;
+    std::condition_variable queue_cv_;
+    std::atomic<bool> stop_workers_;
+    static const int WORKER_COUNT = 2;          ///< 工作线程数量
     
     // 统计信息
     std::atomic<int> total_requests_;

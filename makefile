@@ -31,7 +31,8 @@ MODULE_SRCS = ./backend/src/module/Database.cpp \
               ./backend/src/module/ai_api/AiService.cpp \
               ./backend/src/module/redis/RedisClient.cpp
 
-COMMON_SRCS = ./backend/src/common/Util.cpp
+COMMON_SRCS = ./backend/src/common/Util.cpp \
+              ./backend/src/common/JsonUtil.cpp
 
 MAIN_SRC = ./backend/src/main.cpp
 

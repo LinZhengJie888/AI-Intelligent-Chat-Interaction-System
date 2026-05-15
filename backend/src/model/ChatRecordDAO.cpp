@@ -97,10 +97,13 @@ bool ChatRecordDAO::insert(ChatRecord& record) {
  */
 bool ChatRecordDAO::update(const ChatRecord& record) {
     char sql[4096];
+    // 对 content 字段进行转义
+    std::string escaped_content = db_.escapeString(record.content);
+    
     snprintf(sql, sizeof(sql),
             "UPDATE chat_record SET content='%s', msg_type=%d, is_ai=%d, "
             "is_recalled=%d, is_read=%d WHERE id=%lu",
-            record.content.c_str(), record.msg_type, record.is_ai,
+            escaped_content.c_str(), record.msg_type, record.is_ai,
             record.is_recalled, record.is_read, (unsigned long)record.id);
     
     return db_.execute(sql);

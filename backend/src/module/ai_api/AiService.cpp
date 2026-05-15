@@ -13,6 +13,7 @@
 #include "model/ChatAISetting.h"
 #include "model/ChatAISettingDAO.h"
 #include "common/Util.h"
+#include "common/JsonUtil.h"
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -34,20 +35,7 @@
  * @brief JSON转义辅助函数
  */
 static std::string escapeJson(const std::string& str) {
-    std::string result;
-    for (char c : str) {
-        switch (c) {
-            case '"': result += "\\\""; break;
-            case '\\': result += "\\\\"; break;
-            case '\b': result += "\\b"; break;
-            case '\f': result += "\\f"; break;
-            case '\n': result += "\\n"; break;
-            case '\r': result += "\\r"; break;
-            case '\t': result += "\\t"; break;
-            default: result += c; break;
-        }
-    }
-    return result;
+    return JsonUtil::escapeString(str);
 }
 
 /**
@@ -102,121 +90,7 @@ static uint64_t getGroupNumId(Database& db, const std::string& group_id) {
  * @brief 获取JSON值辅助函数
  */
 static std::string getJsonValue(const std::string& json, const std::string& key) {
-    std::string search_key = "\"" + key + "\"";
-    size_t pos = json.find(search_key);
-    if (pos == std::string::npos) return "";
-    
-    pos = json.find(":", pos);
-    if (pos == std::string::npos) return "";
-    pos++;
-    
-    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
-    
-    if (pos >= json.size()) return "";
-    
-    std::string value;
-    if (json[pos] == '"') {
-        // 字符串值 - 正确处理转义引号
-        pos++;
-        size_t end = pos;
-        while (end < json.size()) {
-            if (json[end] == '\\' && end + 1 < json.size()) {
-                end += 2; // 跳过转义字符
-                continue;
-            }
-            if (json[end] == '"') break;
-            end++;
-        }
-        if (end >= json.size()) return "";
-        value = json.substr(pos, end - pos);
-        // 处理转义字符
-        std::string unescaped;
-        for (size_t i = 0; i < value.size(); i++) {
-            if (value[i] == '\\' && i + 1 < value.size()) {
-                switch (value[i + 1]) {
-                    case '"': unescaped += '"'; i++; break;
-                    case '\\': unescaped += '\\'; i++; break;
-                    case 'n': unescaped += '\n'; i++; break;
-                    case 'r': unescaped += '\r'; i++; break;
-                    case 't': unescaped += '\t'; i++; break;
-                    case 'u': {
-                        // Unicode转义 \uXXXX
-                        if (i + 5 < value.size()) {
-                            std::string hex = value.substr(i + 2, 4);
-                            unsigned long codepoint = strtoul(hex.c_str(), nullptr, 16);
-                            
-                            // 检查是否是代理对
-                            if (codepoint >= 0xD800 && codepoint <= 0xDBFF && i + 11 < value.size() && value[i + 6] == '\\' && value[i + 7] == 'u') {
-                                std::string hex2 = value.substr(i + 8, 4);
-                                unsigned long codepoint2 = strtoul(hex2.c_str(), nullptr, 16);
-                                if (codepoint2 >= 0xDC00 && codepoint2 <= 0xDFFF) {
-                                    // 解码代理对
-                                    unsigned long full_codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (codepoint2 - 0xDC00);
-                                    // UTF-8编码
-                                    if (full_codepoint <= 0x7F) {
-                                        unescaped += static_cast<char>(full_codepoint);
-                                    } else if (full_codepoint <= 0x7FF) {
-                                        unescaped += static_cast<char>(0xC0 | (full_codepoint >> 6));
-                                        unescaped += static_cast<char>(0x80 | (full_codepoint & 0x3F));
-                                    } else if (full_codepoint <= 0xFFFF) {
-                                        unescaped += static_cast<char>(0xE0 | (full_codepoint >> 12));
-                                        unescaped += static_cast<char>(0x80 | ((full_codepoint >> 6) & 0x3F));
-                                        unescaped += static_cast<char>(0x80 | (full_codepoint & 0x3F));
-                                    } else {
-                                        unescaped += static_cast<char>(0xF0 | (full_codepoint >> 18));
-                                        unescaped += static_cast<char>(0x80 | ((full_codepoint >> 12) & 0x3F));
-                                        unescaped += static_cast<char>(0x80 | ((full_codepoint >> 6) & 0x3F));
-                                        unescaped += static_cast<char>(0x80 | (full_codepoint & 0x3F));
-                                    }
-                                    i += 11; // 跳过 \uXXXX\uXXXX
-                                    break;
-                                }
-                            }
-                            
-                            // 单个Unicode码点
-                            if (codepoint <= 0x7F) {
-                                unescaped += static_cast<char>(codepoint);
-                            } else if (codepoint <= 0x7FF) {
-                                unescaped += static_cast<char>(0xC0 | (codepoint >> 6));
-                                unescaped += static_cast<char>(0x80 | (codepoint & 0x3F));
-                            } else {
-                                unescaped += static_cast<char>(0xE0 | (codepoint >> 12));
-                                unescaped += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
-                                unescaped += static_cast<char>(0x80 | (codepoint & 0x3F));
-                            }
-                            i += 5; // 跳过 \uXXXX
-                        }
-                        break;
-                    }
-                    default: unescaped += value[i]; break;
-                }
-            } else {
-                unescaped += value[i];
-            }
-        }
-        value = unescaped;
-    } else if (json[pos] == '{' || json[pos] == '[') {
-        int bracket_count = 0;
-        char target_bracket = (json[pos] == '{') ? '}' : ']';
-        size_t start = pos;
-        for (; pos < json.size(); pos++) {
-            if (json[pos] == '\\') {
-                pos++; // 跳过转义字符
-                continue;
-            }
-            if (json[pos] == json[start]) bracket_count++;
-            else if (json[pos] == target_bracket) bracket_count--;
-            if (bracket_count == 0) break;
-        }
-        value = json.substr(start, pos - start + 1);
-    } else {
-        size_t end = json.find_first_of(",}", pos);
-        if (end == std::string::npos) end = json.size();
-        value = json.substr(pos, end - pos);
-        value.erase(std::remove_if(value.begin(), value.end(), ::isspace), value.end());
-    }
-    
-    return value;
+    return JsonUtil::getString(json, key);
 }
 
 #ifdef USE_CURL
@@ -233,7 +107,7 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::stri
  * @brief 构造函数
  */
 AiService::AiService(Database& db) 
-    : db_(db), total_requests_(0), success_requests_(0), failed_requests_(0) {
+    : db_(db), stop_workers_(false), total_requests_(0), success_requests_(0), failed_requests_(0) {
     // 初始化默认配置
     config_.api_url = "";
     config_.api_key = "";
@@ -243,13 +117,46 @@ AiService::AiService(Database& db)
     config_.max_retries = DEFAULT_MAX_RETRIES;
     config_.max_message_length = DEFAULT_MAX_MESSAGE_LENGTH;
     config_.enable_cache = true;
+    
+    // 启动工作线程
+    for (int i = 0; i < WORKER_COUNT; i++) {
+        worker_threads_.emplace_back([this]() {
+            while (true) {
+                AIRequest request;
+                {
+                    std::unique_lock<std::mutex> lock(queue_mutex_);
+                    queue_cv_.wait(lock, [this]() { 
+                        return stop_workers_ || !task_queue_.empty(); 
+                    });
+                    
+                    if (stop_workers_ && task_queue_.empty()) {
+                        return;
+                    }
+                    
+                    request = task_queue_.front();
+                    task_queue_.pop();
+                }
+                
+                // 处理请求
+                asyncProcessRequest(request);
+            }
+        });
+    }
 }
 
 /**
  * @brief 析构函数
  */
 AiService::~AiService() {
-    // 清理资源
+    // 停止工作线程
+    stop_workers_ = true;
+    queue_cv_.notify_all();
+    
+    for (auto& thread : worker_threads_) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
 }
 
 /**
@@ -330,10 +237,12 @@ std::string AiService::processRequest(const std::string& user_id, const std::str
         pending_requests_[request_id] = request;
     }
     
-    // 异步处理请求
-    std::thread([this, request]() {
-        asyncProcessRequest(request);
-    }).detach();
+    // 将请求添加到任务队列
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        task_queue_.push(request);
+    }
+    queue_cv_.notify_one();
     
     total_requests_++;
     
@@ -702,11 +611,12 @@ bool AiService::getCachedResponse(const std::string& question, std::string& resp
     
     // 从数据库查找
     char sql[4096];
+    std::string safe_question = db_.escapeString(question);
     snprintf(sql, sizeof(sql),
              "SELECT response FROM ai_cache WHERE question='%s' "
              "AND create_time > DATE_SUB(NOW(), INTERVAL %d HOUR) "
              "ORDER BY create_time DESC LIMIT 1",
-             question.c_str(), CACHE_EXPIRE_HOURS);
+             safe_question.c_str(), CACHE_EXPIRE_HOURS);
     
     MYSQL_RES* res = db_.query(sql);
     if (!res) {
@@ -917,7 +827,14 @@ void AiService::sendAIResponse(const std::string& ai_nickname, const std::string
 
         // 保存到聊天记录
         ChatRecord record;
-        record.sender_id = 0;  // 0 表示 AI
+        // 获取AI用户的数字ID（从user表中查询user_id='ai'的记录）
+        static uint64_t ai_user_id_num = 0;
+        static bool ai_user_id_initialized = false;
+        if (!ai_user_id_initialized) {
+            ai_user_id_num = getUserIdNum(db_, "ai");
+            ai_user_id_initialized = true;
+        }
+        record.sender_id = ai_user_id_num;  // 使用AI用户的实际ID
         record.content = message;
         record.is_ai = 1;
 

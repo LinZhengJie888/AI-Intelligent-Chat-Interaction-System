@@ -1,0 +1,31 @@
+WebSocket proxy server running on ws://localhost:8081
+Forwarding to 127.0.0.1:8080
+HTTP static server running on http://localhost:8082
+Serving static files from: /home/lin/桌面/AI智能聊天互动系统/backend/static
+New WebSocket client connected
+Connected to backend TCP server
+WebSocket client disconnected
+TCP connection closed
+New WebSocket client connected
+Connected to backend TCP server
+New WebSocket client connected
+Connected to backend TCP server
+WebSocket client disconnected
+TCP connection closed
+New WebSocket client connected
+Connected to backend TCP server
+TCP connection closed
+TCP connection closed
+WebSocket client disconnected
+WebSocket client disconnected
+New WebSocket client connected
+TCP connection error: Error: connect ECONNREFUSED 127.0.0.1:8080
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1611:16) {
+  errno: -111,
+  code: 'ECONNREFUSED',
+  syscall: 'connect',
+  address: '127.0.0.1',
+  port: 8080
+}
+TCP connection closed
+WebSocket client disconnected

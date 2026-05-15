@@ -22,7 +22,19 @@ function getColorForId(id) {
 function fullAvatarUrl(path) {
   if (!path) return ''
   if (path.startsWith('data:') || path.startsWith('http')) return path
-  return `http://${window.location.hostname}:8082${path}`
+  // 动态获取静态资源服务器地址
+  const staticPort = window.__STATIC_PORT__ || '8082'
+  return `http://${window.location.hostname}:${staticPort}${path}`
+}
+
+/** 获取 WebSocket 连接地址 */
+function getWebSocketUrl() {
+  // 优先使用配置的地址
+  if (window.__WS_URL__) return window.__WS_URL__
+  // 动态构建地址
+  const wsPort = window.__WS_PORT__ || '8081'
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.hostname}:${wsPort}`
 }
 
 const store = reactive({
@@ -68,7 +80,9 @@ const store = reactive({
     this.wsConnecting = true
     try {
       this._registerHandlers()
-      await wsClient.connect('ws://localhost:8081')
+      const wsUrl = getWebSocketUrl()
+      console.log('[Store] 连接 WebSocket:', wsUrl)
+      await wsClient.connect(wsUrl)
       this.wsConnected = true
       this.wsConnecting = false
       console.log('[Store] WebSocket 连接成功')
@@ -289,11 +303,21 @@ const store = reactive({
           timestamp: new Date(r.send_time).getTime() || 0,
           color: r.is_ai ? undefined : getColorForId(r.sender_id)
         }))
-        // 合并：保留本地已有的新消息，追加历史记录
+        // 合并：使用内容+时间+发送者去重
         const key = this._chatKey(this.currentChat.type, this.currentChat.id)
         const localMsgs = this.messagesMap[key] || []
-        const localTimestamps = new Set(localMsgs.map(m => m.timestamp))
-        const newHistory = historyMsgs.filter(m => !localTimestamps.has(m.timestamp))
+        
+        // 创建本地消息的唯一标识集合
+        const localKeys = new Set(localMsgs.map(m => 
+          `${m.sender}_${m.text}_${m.timestamp}`
+        ))
+        
+        // 过滤掉已存在的历史消息
+        const newHistory = historyMsgs.filter(m => {
+          const msgKey = `${m.sender}_${m.text}_${m.timestamp}`
+          return !localKeys.has(msgKey)
+        })
+        
         this.messagesMap[key] = [...newHistory, ...localMsgs]
         this.messages = this.messagesMap[key]
       }
@@ -402,6 +426,32 @@ const store = reactive({
         this.successMessage = msg.msg || '加群申请已拒绝'
         this.errorMessage = ''
         this.loadGroupRequests()
+      }
+    })
+
+    // ===== AI 设置变更通知 =====
+    wsClient.on(MessageType.AI_SETTING, (msg) => {
+      console.log('[Store] AI 设置变更通知:', msg)
+      if (msg.code === 0 && msg.data) {
+        const { chat_key, nickname, tone, priority } = msg.data
+        if (chat_key) {
+          // 更新本地 AI 设置缓存
+          this.chatAISettings[chat_key] = { nickname, tone, priority }
+          localStorage.setItem('ai-settings-map', JSON.stringify(this.chatAISettings))
+          
+          // 如果是当前聊天，更新 currentAISettings
+          const currentChatKey = `${this.currentChat.type}:${this.currentChat.id}`
+          if (chat_key === currentChatKey) {
+            this.currentAISettings = { nickname, tone, priority }
+          }
+          
+          // 如果是独立 AI 对话，更新页面标题
+          if (chat_key === 'ai:ai' && this.currentChat.type === 'ai') {
+            this.currentChat.name = nickname
+          }
+          
+          this.successMessage = `AI 设置已更新: ${nickname}`
+        }
       }
     })
 

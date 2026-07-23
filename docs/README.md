@@ -220,10 +220,13 @@ AI智能聊天互动系统/
 | 功能 | 说明 |
 |------|------|
 | 调用方式 | 按键调用 / @AI 召唤 |
-| 回复规范 | 单条≤50字，分条发送 |
+| 流式输出 | SSE 流式逐字推送，前端实时显示打字光标 |
+| 上下文记忆 | 自动注入最近N轮对话历史，Token预算自动截断 |
+| 分段策略 | 流式逐字推送；非流式回退按自然语句边界切分（≤80字符） |
 | 个性化设置 | 昵称、语气、响应优先级（按聊天独立设置） |
 | 多厂商兼容 | 配置 API 地址和密钥即可切换 |
 | 聊天记录 | 用户提问和AI回复都保存到数据库 |
+| 容错机制 | 流式失败自动回退非流式调用 |
 
 ---
 
@@ -271,6 +274,9 @@ enum class MessageType {
     AI_REQUEST = 50,        // AI 请求
     AI_AT = 51,             // AI @召唤
     AI_SETTING = 52,        // AI 设置
+    AI_STREAM_START = 53,   // AI 流式输出开始
+    AI_STREAM_CHUNK = 54,   // AI 流式输出增量
+    AI_STREAM_END = 55,     // AI 流式输出结束
 
     // 其他
     UPDATE_USERNAME = 62,   // 修改用户名
@@ -309,6 +315,9 @@ model = mimo-v2.5-pro   # 模型名称
 default_nickname = AI助手
 default_tone = 0        # 默认语气
 default_priority = 0    # 默认优先级
+enable_stream = true       # 是否启用流式输出
+context_message_count = 10 # 上下文消息条数
+max_context_tokens = 2000  # 上下文最大Token数
 
 [server]
 port = 8080             # TCP 服务器端口
@@ -562,6 +571,12 @@ A: 确保后端已重新编译，群成员查询需要正确的 group_id 映射
 
 ### Q: AI回复显示乱码
 A: 后端已修复 Unicode 代理对解码，确保重新编译后端
+
+### Q: AI回复不流式（一次性出现）
+A: 检查 config.ini 中 `enable_stream = true`，确保后端已重新编译（`make clean && make`）
+
+### Q: AI没有上下文记忆
+A: 检查 config.ini 中 `context_message_count` 是否大于0，确保数据库中有历史对话记录
 
 ---
 

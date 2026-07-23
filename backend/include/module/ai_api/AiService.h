@@ -42,6 +42,22 @@ enum class AIPriority {
 };
 
 /**
+ * @struct ContextMessage
+ * @brief 上下文消息结构体（用于多轮对话历史）
+ */
+struct ContextMessage {
+    std::string role;       ///< 角色："user" 或 "assistant"
+    std::string content;    ///< 消息内容
+};
+
+/**
+ * @brief 流式回调函数类型
+ * @param delta 增量内容
+ * @param is_done 是否结束
+ */
+using AIStreamCallback = std::function<void(const std::string& delta, bool is_done)>;
+
+/**
  * @struct AIRequest
  * @brief AI请求结构体
  */
@@ -53,6 +69,7 @@ struct AIRequest {
     bool is_group;              ///< 是否是群聊
     std::string extra;          ///< 额外数据（包含chatKey等）
     std::string timestamp;      ///< 时间戳
+    std::vector<ContextMessage> context; ///< 多轮对话上下文
 };
 
 /**
@@ -79,6 +96,9 @@ struct AIServiceConfig {
     int max_retries;            ///< 最大重试次数
     int max_message_length;     ///< 单条消息最大长度
     bool enable_cache;          ///< 是否启用缓存
+    bool enable_stream;         ///< 是否启用流式输出
+    int context_message_count;  ///< 上下文消息条数
+    int max_context_tokens;     ///< 上下文最大Token数
 };
 
 /**
@@ -125,10 +145,25 @@ public:
      * @param tone AI语气
      * @param priority AI优先级
      * @param response 输出的响应内容
+     * @param context 多轮对话上下文（默认空，向后兼容）
      * @return 调用成功返回true，失败返回false
      */
     bool callAIAPI(const std::string& question, AITone tone, AIPriority priority, 
-                  std::string& response);
+                  std::string& response, const std::vector<ContextMessage>& context = {});
+    
+    /**
+     * @brief 流式调用AI API
+     * @param question 问题内容
+     * @param context 多轮对话上下文
+     * @param tone AI语气
+     * @param priority AI优先级
+     * @param callback 流式回调函数
+     * @return 调用成功返回true，失败返回false
+     */
+    bool callAIAPIStream(const std::string& question, 
+                         const std::vector<ContextMessage>& context,
+                         AITone tone, AIPriority priority, 
+                         const AIStreamCallback& callback);
     
     /**
      * @brief 拆分AI回复
@@ -136,7 +171,7 @@ public:
      * @param max_length 单条消息最大长度
      * @return 拆分后的消息列表
      */
-    std::vector<std::string> splitResponse(const std::string& response, int max_length = 50);
+    std::vector<std::string> splitResponse(const std::string& response, int max_length = 80);
     
     /**
      * @brief 设置AI配置
@@ -248,6 +283,52 @@ private:
                        const std::string& origin_user_id, const std::string& chat_key);
     
     /**
+     * @brief 获取多轮对话上下文
+     * @param user_id 用户ID
+     * @param target_id 目标ID
+     * @param is_group 是否是群聊
+     * @return 上下文消息列表
+     */
+    std::vector<ContextMessage> getContextMessages(const std::string& user_id, 
+                                                    const std::string& target_id, 
+                                                    bool is_group);
+    
+    /**
+     * @brief 估算文本的Token数
+     * @param text 文本内容
+     * @return 估算的Token数
+     */
+    int estimateTokens(const std::string& text);
+    
+    /**
+     * @brief 按Token预算裁剪上下文
+     * @param context 上下文消息列表
+     * @param max_tokens 最大Token数
+     */
+    void trimContextByTokenBudget(std::vector<ContextMessage>& context, int max_tokens);
+    
+    /**
+     * @brief 发送流式开始消息
+     */
+    void sendAIStreamStart(const std::string& stream_id, const std::string& ai_nickname,
+                           const std::string& target_id, bool is_group,
+                           const std::string& origin_user_id, const std::string& chat_key);
+    
+    /**
+     * @brief 发送流式增量消息
+     */
+    void sendAIStreamChunk(const std::string& stream_id, const std::string& delta,
+                           const std::string& target_id, bool is_group,
+                           const std::string& origin_user_id, const std::string& chat_key);
+    
+    /**
+     * @brief 发送流式结束消息
+     */
+    void sendAIStreamEnd(const std::string& stream_id, const std::string& target_id,
+                         bool is_group, const std::string& origin_user_id,
+                         const std::string& chat_key, bool success);
+    
+    /**
      * @brief 异步处理AI请求
      * @param request AI请求
      */
@@ -272,6 +353,31 @@ private:
      * @return 解析成功返回true，失败返回false
      */
     bool parseAIResponse(const std::string& response, std::string& content);
+    
+    /**
+     * @brief 流式HTTP POST请求
+     * @param url 请求URL
+     * @param headers 请求头
+     * @param body 请求体
+     * @param callback 流式回调函数
+     * @param timeout 超时时间
+     * @return 调用成功返回true，失败返回false
+     */
+    bool httpPostStream(const std::string& url, const std::map<std::string, std::string>& headers,
+                        const std::string& body, const AIStreamCallback& callback, int timeout);
+    
+    /**
+     * @brief 解析SSE数据行
+     * @param line SSE数据行
+     * @param content 输出的内容
+     * @return 0=普通内容, 1=流结束([DONE]), -1=无效行
+     */
+    int parseSSEData(const std::string& line, std::string& content);
+    
+    /**
+     * @brief 静态JSON值获取（供C回调使用）
+     */
+    static std::string getJsonStatic(const std::string& json, const std::string& key);
 
     Database& db_;                              ///< 数据库连接引用
     AIServiceConfig config_;                    ///< AI配置

@@ -65,6 +65,9 @@ enum class MessageType {
     AI_REQUEST = 50,        ///< AI请求（按键调用）
     AI_AT = 51,             ///< AI请求（@召唤）
     AI_SETTING = 52,        ///< AI设置修改
+    AI_STREAM_START = 53,   ///< AI流式输出开始
+    AI_STREAM_CHUNK = 54,   ///< AI流式输出增量
+    AI_STREAM_END = 55,     ///< AI流式输出结束
     
     // 用户信息修改
     UPDATE_USERNAME = 62,   ///< 修改用户名

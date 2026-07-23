@@ -1,15 +1,23 @@
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import store from '../store'
 
 const messagesArea = ref(null)
 
+// 是否有AI正在流式输出
+const isStreaming = computed(() => store.messages.some(m => m.streaming))
+
 // 监听消息变化，自动滚动到底部
 watch(() => store.messages.length, () => {
   nextTick(() => {
-    if (messagesArea.value) {
-      messagesArea.value.scrollTop = messagesArea.value.scrollHeight
-    }
+    if (messagesArea.value) messagesArea.value.scrollTop = messagesArea.value.scrollHeight
+  })
+})
+
+// 监听最后一条消息的文本变化（流式输出时滚动）
+watch(() => store.messages.length > 0 ? store.messages[store.messages.length - 1].text : '', () => {
+  nextTick(() => {
+    if (messagesArea.value) messagesArea.value.scrollTop = messagesArea.value.scrollHeight
   })
 })
 
@@ -21,7 +29,7 @@ function autoResize(el) {
 function sendMessage(e) {
   const textarea = e.target.closest('.input-bar').querySelector('textarea')
   const text = textarea.value.trim()
-  if (!text) return
+  if (!text || isStreaming.value) return
   store.sendMessage(text, 'ai')
   textarea.value = ''
   textarea.style.height = 'auto'
@@ -66,6 +74,7 @@ function sendMessage(e) {
             <div class="msg-bubble msg-bubble-ai">
               <div class="ai-bubble-header"><span class="ai-badge">AI</span>AI 助手</div>
               <span style="white-space:pre-line">{{ msg.text }}</span>
+              <span v-if="msg.streaming" class="streaming-cursor">▌</span>
             </div>
             <div class="msg-time">{{ msg.time }}</div>
           </div>
@@ -74,8 +83,8 @@ function sendMessage(e) {
     </div>
 
     <div class="input-bar">
-      <textarea class="input-field" placeholder="问 AI 助手任何问题..." rows="1" @input="autoResize($event.target)" @keydown.enter.exact.prevent="sendMessage"></textarea>
-      <button class="input-send-btn" @click="sendMessage">
+      <textarea class="input-field" :disabled="isStreaming" :placeholder="isStreaming ? 'AI 正在回复...' : '问 AI 助手任何问题...'" rows="1" @input="autoResize($event.target)" @keydown.enter.exact.prevent="sendMessage"></textarea>
+      <button class="input-send-btn" :disabled="isStreaming" :style="{ opacity: isStreaming ? 0.5 : 1 }" @click="sendMessage">
         <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" /></svg>
       </button>
     </div>
@@ -85,4 +94,6 @@ function sendMessage(e) {
 <style scoped>
 .chat-screen{background:var(--wx-bg)}
 .messages-area{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+.streaming-cursor{animation:blink 0.8s infinite;color:var(--wx-green);font-weight:bold}
+@keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
 </style>

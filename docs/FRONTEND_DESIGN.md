@@ -214,6 +214,9 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
 - AI 消息支持换行渲染
 - 输入框 placeholder 为"问 AI 助手任何问题..."
 - AI设置入口（顶栏右侧，齿轮图标）
+- **流式输出**：AI回复时逐字推送，气泡末尾显示闪烁光标动画（`streaming-cursor` CSS 动画）
+- 流式过程中输入框和发送按钮禁用，placeholder 变为"AI 正在回复..."
+- 自动滚动：监听最后一条消息的文本变化，流式输出时持续滚动到底部
 
 ### 3.6 AI 设置弹窗（聊天级别）
 
@@ -425,6 +428,7 @@ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
 | `fadeIn` | 元素入场 | translateY(8px)→0 + opacity, 300ms |
 | 悬停变色 | 卡片/按钮 | border-color 渐变, 150ms |
 | 发送按钮 | 点击 | background 渐变, 150ms |
+| 打字光标 | AI流式输出 | opacity 1→0 循环, 800ms, `streaming-cursor` |
 
 ---
 

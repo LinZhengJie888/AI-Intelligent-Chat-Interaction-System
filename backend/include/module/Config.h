@@ -34,6 +34,9 @@ struct AIConfig {
     int default_priority;         ///< AI默认响应优先级
     int timeout;                  ///< AI请求超时时间（秒）
     int connect_timeout;          ///< AI连接超时时间（秒）
+    bool enable_stream;           ///< 是否启用流式输出
+    int context_message_count;    ///< 上下文消息条数
+    int max_context_tokens;       ///< 上下文最大Token数
 };
 
 /**

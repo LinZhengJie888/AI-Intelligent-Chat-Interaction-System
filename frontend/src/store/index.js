@@ -350,6 +350,108 @@ const store = reactive({
       console.log('[Store] AI_AT 响应:', msg)
     })
 
+    // ===== AI 流式输出开始 =====
+    wsClient.on(MessageType.AI_STREAM_START, (msg) => {
+      console.log('[Store] AI流式开始:', msg)
+      if (msg.code === 0 && msg.data) {
+        const d = msg.data
+        let extra = {}
+        try { extra = typeof d.extra === 'string' ? JSON.parse(d.extra) : (d.extra || {}) } catch (_) {}
+        const streamId = extra.stream_id || ''
+        const chatKey = extra.chat_key || ''
+        const aiNickname = extra.ai_nickname || 'AI助手'
+
+        // 解析 chatKey → type + id
+        let msgType = 'single'
+        let chatId = d.to_user_id || d.from_user_id || ''
+        if (chatKey) {
+          const parts = chatKey.split(':')
+          msgType = parts[0] || 'single'
+          chatId = parts.slice(1).join(':') || chatId
+        }
+
+        const msgs = this._getMessages(msgType, chatId)
+        msgs.push({
+          type: 'ai',
+          sender: 'AI',
+          name: aiNickname,
+          text: '',
+          streaming: true,
+          stream_id: streamId,
+          time: this._fmtTime(d.timestamp || Date.now()),
+          timestamp: parseInt(d.timestamp) || Date.now()
+        })
+        this._refreshCurrentMessages()
+      }
+    })
+
+    // ===== AI 流式输出增量 =====
+    wsClient.on(MessageType.AI_STREAM_CHUNK, (msg) => {
+      if (msg.code === 0 && msg.data) {
+        const d = msg.data
+        let extra = {}
+        try { extra = typeof d.extra === 'string' ? JSON.parse(d.extra) : (d.extra || {}) } catch (_) {}
+        const streamId = extra.stream_id || ''
+        const chatKey = extra.chat_key || ''
+        const delta = d.content || ''
+
+        // 解析 chatKey → type + id
+        let msgType = 'single'
+        let chatId = d.to_user_id || ''
+        if (chatKey) {
+          const parts = chatKey.split(':')
+          msgType = parts[0] || 'single'
+          chatId = parts.slice(1).join(':') || chatId
+        }
+
+        const msgs = this._getMessages(msgType, chatId)
+        // 查找对应的流式占位消息
+        const target = msgs.find(m => m.stream_id === streamId && m.streaming)
+        if (target) {
+          target.text += delta
+        }
+        this._refreshCurrentMessages()
+      }
+    })
+
+    // ===== AI 流式输出结束 =====
+    wsClient.on(MessageType.AI_STREAM_END, (msg) => {
+      console.log('[Store] AI流式结束:', msg)
+      if (msg.code === 0 && msg.data) {
+        const d = msg.data
+        let extra = {}
+        try { extra = typeof d.extra === 'string' ? JSON.parse(d.extra) : (d.extra || {}) } catch (_) {}
+        const streamId = extra.stream_id || ''
+        const chatKey = extra.chat_key || ''
+
+        // 解析 chatKey → type + id
+        let msgType = 'single'
+        let chatId = d.to_user_id || ''
+        if (chatKey) {
+          const parts = chatKey.split(':')
+          msgType = parts[0] || 'single'
+          chatId = parts.slice(1).join(':') || chatId
+        }
+
+        const msgs = this._getMessages(msgType, chatId)
+        const target = msgs.find(m => m.stream_id === streamId && m.streaming)
+        if (target) {
+          target.streaming = false
+          // 如果文本为空（流式失败），显示提示
+          if (!target.text) {
+            target.text = 'AI回复异常，请稍后再试'
+          }
+        }
+        this._saveMessages(msgType, chatId)
+        this._refreshCurrentMessages()
+
+        // 更新最近聊天预览
+        const finalText = target ? target.text : ''
+        const name = msgType === 'ai' ? 'AI助手' : (msgType === 'group' ? chatId : chatId)
+        this.upsertRecent(msgType, chatId, name, finalText.substring(0, 50))
+      }
+    })
+
     // ===== 好友添加请求通知 =====
     wsClient.on(MessageType.FRIEND_ADD, (msg) => {
       console.log('[Store] 好友请求通知:', msg)

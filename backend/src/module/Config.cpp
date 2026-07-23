@@ -41,6 +41,9 @@ Config::Config() {
     ai_config_.default_priority = 0;
     ai_config_.timeout = 30;
     ai_config_.connect_timeout = 10;
+    ai_config_.enable_stream = true;
+    ai_config_.context_message_count = 10;
+    ai_config_.max_context_tokens = 2000;
     
     // 服务器默认配置
     server_config_.port = 8080;
@@ -161,6 +164,9 @@ bool Config::loadFromFile(const std::string& filename) {
                 else if (key == "default_nickname") ai_config_.default_nickname = value;
                 else if (key == "default_tone") ai_config_.default_tone = std::stoi(value);
                 else if (key == "default_priority") ai_config_.default_priority = std::stoi(value);
+                else if (key == "enable_stream") ai_config_.enable_stream = (value == "true" || value == "1");
+                else if (key == "context_message_count") ai_config_.context_message_count = std::stoi(value);
+                else if (key == "max_context_tokens") ai_config_.max_context_tokens = std::stoi(value);
             } else if (current_section == "server") {
                 if (key == "port") server_config_.port = std::stoi(value);
                 else if (key == "thread_pool_size") server_config_.thread_pool_size = std::stoi(value);
@@ -202,7 +208,10 @@ bool Config::saveToFile(const std::string& filename) {
     file << "model = " << ai_config_.model << "\n";
     file << "default_nickname = " << ai_config_.default_nickname << "\n";
     file << "default_tone = " << ai_config_.default_tone << "\n";
-    file << "default_priority = " << ai_config_.default_priority << "\n\n";
+    file << "default_priority = " << ai_config_.default_priority << "\n";
+    file << "enable_stream = " << (ai_config_.enable_stream ? "true" : "false") << "\n";
+    file << "context_message_count = " << ai_config_.context_message_count << "\n";
+    file << "max_context_tokens = " << ai_config_.max_context_tokens << "\n\n";
     
     file << "[server]\n";
     file << "port = " << server_config_.port << "\n";

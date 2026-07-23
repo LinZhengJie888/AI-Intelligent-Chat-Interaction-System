@@ -175,6 +175,7 @@ function doLeave() {
             <div class="msg-bubble msg-bubble-ai">
               <div class="ai-bubble-header"><span class="ai-badge">AI</span>{{ msg.name || 'AI助手' }}</div>
               <span style="white-space:pre-line">{{ msg.text }}</span>
+              <span v-if="msg.streaming" class="streaming-cursor">▌</span>
             </div>
             <div class="msg-time">{{ msg.time }}</div>
           </div>
@@ -279,6 +280,8 @@ function doLeave() {
 <style scoped>
 .chat-screen{background:var(--wx-bg);position:relative}
 .messages-area{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px}
+.streaming-cursor{animation:blink 0.8s infinite;color:var(--wx-green);font-weight:bold}
+@keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
 .tag-ai{font-size:10px;padding:1px 5px;border-radius:3px;font-weight:500;background:rgba(7,193,96,.12);color:var(--wx-green)}
 .msg-image{max-width:200px;max-height:200px;border-radius:8px;display:block}
 .image-preview-bar{display:flex;align-items:center;gap:12px;padding:8px 16px;background:var(--wx-white);border-top:1px solid var(--wx-border)}
